@@ -64,3 +64,7 @@ export async function exec(sql: string): Promise<void> {
 
 export { db };
 
+// 别名导出，保持向后兼容
+export const dbQuery = query;
+export const dbRun = run;
+
