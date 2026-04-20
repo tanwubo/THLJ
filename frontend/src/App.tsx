@@ -9,7 +9,10 @@ import { useAuthStore } from './store/authStore'
 
 // 受保护的路由组件
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-  const { token } = useAuthStore()
+  const { token, _hasHydrated } = useAuthStore()
+  if (!_hasHydrated) {
+    return <div className="min-h-screen flex items-center justify-center">加载中...</div>
+  }
   if (!token) {
     return <Navigate to="/login" replace />
   }
@@ -17,16 +20,16 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 }
 
 function App() {
-  const { token, loadProfile } = useAuthStore()
+  const { token, loadProfile, _hasHydrated } = useAuthStore()
 
   useEffect(() => {
-    if (token) {
+    if (token && _hasHydrated) {
       loadProfile().catch(() => {
         // 加载失败会自动跳转到登录页
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+  }, [token, _hasHydrated])
 
   return (
     <Routes>

@@ -11,6 +11,8 @@ interface AuthState {
   partnerId: number | null
   partner: { id: number; username: string } | null
   socket: Socket | null
+  _hasHydrated: boolean
+  setHasHydrated: (state: boolean) => void
   connectSocket: () => void
   disconnectSocket: () => void
   login: (username: string, password: string) => Promise<void>
@@ -30,6 +32,8 @@ export const useAuthStore = create<AuthState>()(
       partnerId: null,
       partner: null,
       socket: null,
+      _hasHydrated: false,
+      setHasHydrated: (hydrated) => set({ _hasHydrated: hydrated }),
 
       connectSocket: () => {
         const state = useAuthStore.getState()
@@ -168,6 +172,9 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       partialize: (state) => ({ token: state.token, user: state.user }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )
