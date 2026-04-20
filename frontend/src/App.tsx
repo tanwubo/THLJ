@@ -25,7 +25,8 @@ function App() {
         // 加载失败会自动跳转到登录页
       })
     }
-  }, [token, loadProfile])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
 
   return (
     <Routes>
