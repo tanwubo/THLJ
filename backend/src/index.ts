@@ -7,6 +7,7 @@ import authRoutes from './routes/authRoutes';
 import timelineRoutes from './routes/timelineRoutes';
 import todoRoutes from './routes/todoRoutes';
 import expenseRoutes from './routes/expenseRoutes';
+import memoRoutes from './routes/memoRoutes';
 
 const app = express();
 const server = http.createServer(app);
@@ -28,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/timeline', timelineRoutes);
 app.use('/api/todos', todoRoutes);
 app.use('/api/expenses', expenseRoutes);
+app.use('/api/memos', memoRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
