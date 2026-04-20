@@ -1,5 +1,6 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { query, run } from '../db';
+import { AuthRequest } from '../middleware/auth';
 import path from 'path';
 import fs from 'fs/promises';
 
@@ -14,9 +15,9 @@ async function ensureUploadDir() {
   }
 }
 
-export const getAttachments = async (req: Request, res: Response) => {
+export const getAttachments = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodeId } = req.query;
 
     if (!nodeId) {
@@ -40,9 +41,9 @@ export const getAttachments = async (req: Request, res: Response) => {
   }
 };
 
-export const uploadAttachment = async (req: Request, res: Response) => {
+export const uploadAttachment = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodeId } = req.body;
     const file = (req as any).file;
 
@@ -86,9 +87,9 @@ export const uploadAttachment = async (req: Request, res: Response) => {
   }
 };
 
-export const deleteAttachment = async (req: Request, res: Response) => {
+export const deleteAttachment = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { id } = req.params;
 
     const attachment = query('SELECT * FROM attachments a JOIN timeline_nodes n ON a.node_id = n.id WHERE a.id = ? AND n.user_id = ?', [id, userId]);

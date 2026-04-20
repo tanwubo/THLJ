@@ -1,5 +1,6 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { query, run } from '../db';
+import { AuthRequest } from '../middleware/auth';
 
 // 预设费用分类
 export const EXPENSE_CATEGORIES = {
@@ -7,9 +8,9 @@ export const EXPENSE_CATEGORIES = {
   expense: ['婚宴', '婚庆', '婚车', '婚纱摄影', '三金/五金', '酒店预订', '婚车车队', '蜜月旅行', '其他支出']
 };
 
-export const getExpenses = async (req: Request, res: Response) => {
+export const getExpenses = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodeId } = req.query;
 
     if (!nodeId) {
@@ -45,9 +46,9 @@ export const getExpenses = async (req: Request, res: Response) => {
   }
 };
 
-export const createExpense = async (req: Request, res: Response) => {
+export const createExpense = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodeId, type, amount, category, description } = req.body;
 
     if (!nodeId || !type || !amount || !category) {
@@ -72,9 +73,9 @@ export const createExpense = async (req: Request, res: Response) => {
   }
 };
 
-export const updateExpense = async (req: Request, res: Response) => {
+export const updateExpense = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { id } = req.params;
     const { type, amount, category, description } = req.body;
 
@@ -105,9 +106,9 @@ export const updateExpense = async (req: Request, res: Response) => {
   }
 };
 
-export const deleteExpense = async (req: Request, res: Response) => {
+export const deleteExpense = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { id } = req.params;
 
     const expense = query('SELECT * FROM expense_records e JOIN timeline_nodes n ON e.node_id = n.id WHERE e.id = ? AND n.user_id = ?', [id, userId]);

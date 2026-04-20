@@ -1,9 +1,10 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { query, run } from '../db';
+import { AuthRequest } from '../middleware/auth';
 
-export const getTodos = async (req: Request, res: Response) => {
+export const getTodos = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodeId } = req.query;
 
     if (!nodeId) {
@@ -32,9 +33,9 @@ export const getTodos = async (req: Request, res: Response) => {
   }
 };
 
-export const createTodo = async (req: Request, res: Response) => {
+export const createTodo = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodeId, content, assigneeId, deadline } = req.body;
 
     if (!nodeId || !content) {
@@ -60,9 +61,9 @@ export const createTodo = async (req: Request, res: Response) => {
   }
 };
 
-export const updateTodo = async (req: Request, res: Response) => {
+export const updateTodo = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { id } = req.params;
     const { content, assigneeId, deadline, status } = req.body;
 
@@ -93,9 +94,9 @@ export const updateTodo = async (req: Request, res: Response) => {
   }
 };
 
-export const deleteTodo = async (req: Request, res: Response) => {
+export const deleteTodo = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { id } = req.params;
 
     const todo = query('SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?', [id, userId]);
@@ -111,9 +112,9 @@ export const deleteTodo = async (req: Request, res: Response) => {
   }
 };
 
-export const updateTodoStatus = async (req: Request, res: Response) => {
+export const updateTodoStatus = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { id } = req.params;
     const { status } = req.body;
 

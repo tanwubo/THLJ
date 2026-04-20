@@ -1,9 +1,10 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { query, run } from '../db';
+import { AuthRequest } from '../middleware/auth';
 
-export const getMemo = async (req: Request, res: Response) => {
+export const getMemo = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodeId } = req.query;
 
     if (!nodeId) {
@@ -23,9 +24,9 @@ export const getMemo = async (req: Request, res: Response) => {
   }
 };
 
-export const saveMemo = async (req: Request, res: Response) => {
+export const saveMemo = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodeId, content } = req.body;
 
     if (!nodeId) {

@@ -4,7 +4,26 @@
       "Bash(git init *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(git check-ignore *)",
+      "Bash(git worktree *)",
+      "Bash(mkdir -p data public/uploads)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(timeout 5s node dist/index.js)",
+      "Bash(timeout 10s node dist/index.js)",
+      "Bash(curl -X POST http://localhost:3001/api/auth/register -H \"Content-Type: application/json\" -d '{\"username\":\"testuser\",\"password\":\"123456\",\"email\":\"test@example.com\"}')",
+      "Bash(curl *)",
+      "Bash(node dist/index.js)",
+      "Bash(pkill -f \"node dist/index.js\")",
+      "Bash(taskkill *)",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs kill *)",
+      "Bash(pkill *)",
+      "Bash(npm start *)",
+      "Bash(npx tsc *)",
+      "Bash(npm test *)"
     ]
   }
 }

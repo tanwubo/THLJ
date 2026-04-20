@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { query, run } from '../db';
-import { authMiddleware } from '../middleware/auth';
+import { AuthRequest } from '../middleware/auth';
 
 // 9个标准婚嫁节点
 const DEFAULT_NODES = [
@@ -16,9 +16,9 @@ const DEFAULT_NODES = [
 ];
 
 // 获取用户时间线
-export const getTimeline = async (req: Request, res: Response) => {
+export const getTimeline = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
 
     // 检查用户是否有节点
     let nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [userId]);
@@ -54,9 +54,9 @@ export const getTimeline = async (req: Request, res: Response) => {
 };
 
 // 创建节点
-export const createNode = async (req: Request, res: Response) => {
+export const createNode = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { name, description, deadline } = req.body;
 
     if (!name || !name.trim()) {
@@ -81,9 +81,9 @@ export const createNode = async (req: Request, res: Response) => {
 };
 
 // 更新节点
-export const updateNode = async (req: Request, res: Response) => {
+export const updateNode = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { id } = req.params;
     const { name, description, deadline, status } = req.body;
 
@@ -116,9 +116,9 @@ export const updateNode = async (req: Request, res: Response) => {
 };
 
 // 删除节点（级联删除关联数据）
-export const deleteNode = async (req: Request, res: Response) => {
+export const deleteNode = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { id } = req.params;
 
     // 验证节点归属
@@ -142,9 +142,9 @@ export const deleteNode = async (req: Request, res: Response) => {
 };
 
 // 更新节点顺序
-export const updateNodeOrder = async (req: Request, res: Response) => {
+export const updateNodeOrder = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { nodes } = req.body; // [{id, order}]
 
     for (const item of nodes) {
