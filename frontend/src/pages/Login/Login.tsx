@@ -1,28 +1,54 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button, Input, Toast, Tabs } from 'antd-mobile'
+import { useAuthStore } from '../../store/authStore'
 
 const Login = () => {
   const [activeTab, setActiveTab] = useState('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [email, setEmail] = useState('')
+  const navigate = useNavigate()
+  const { login, register, loading, token } = useAuthStore()
 
-  const handleLogin = () => {
-    if (!username || !password) {
-      Toast.show('请输入用户名和密码')
-      return
-    }
-    // TODO: 实现登录逻辑
-    Toast.show('登录功能开发中...')
+  // 如果已经登录，直接跳转到首页
+  if (token) {
+    navigate('/')
+    return null
   }
 
-  const handleRegister = () => {
+  const handleLogin = async () => {
     if (!username || !password) {
       Toast.show('请输入用户名和密码')
       return
     }
-    // TODO: 实现注册逻辑
-    Toast.show('注册功能开发中...')
+    try {
+      await login(username, password)
+      navigate('/')
+    } catch (error) {
+      // 错误已经在store中处理了
+    }
+  }
+
+  const handleRegister = async () => {
+    if (!username || !password) {
+      Toast.show('请输入用户名和密码')
+      return
+    }
+    if (username.length < 3 || username.length > 20) {
+      Toast.show('用户名长度必须在3-20位之间')
+      return
+    }
+    if (password.length < 6 || password.length > 32) {
+      Toast.show('密码长度必须在6-32位之间')
+      return
+    }
+    try {
+      await register(username, password, email || undefined)
+      navigate('/')
+    } catch (error) {
+      // 错误已经在store中处理了
+    }
   }
 
   return (
@@ -62,6 +88,8 @@ const Login = () => {
               color="danger"
               size="large"
               onClick={handleLogin}
+              loading={loading}
+              disabled={loading}
               className="bg-wedding-red rounded-lg h-12 text-white font-medium"
             >
               登录
@@ -93,6 +121,8 @@ const Login = () => {
               color="danger"
               size="large"
               onClick={handleRegister}
+              loading={loading}
+              disabled={loading}
               className="bg-wedding-red rounded-lg h-12 text-white font-medium"
             >
               注册
