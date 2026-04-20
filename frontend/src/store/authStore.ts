@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { io, Socket } from 'socket.io-client'
 import { authAPI, User } from '../services/api'
 import { Toast } from 'antd-mobile'
 
@@ -7,6 +8,11 @@ interface AuthState {
   token: string | null
   user: User | null
   loading: boolean
+  partnerId: number | null
+  partner: { id: number; username: string } | null
+  socket: Socket | null
+  connectSocket: () => void
+  disconnectSocket: () => void
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, email?: string) => Promise<void>
   bindPartner: (inviteCode: string) => Promise<void>
@@ -21,13 +27,51 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       loading: false,
+      partnerId: null,
+      partner: null,
+      socket: null,
+
+      connectSocket: () => {
+        const state = useAuthStore.getState()
+        if (!state.user?.partnerId || state.socket) return
+
+        const newSocket = io(window.location.origin, {
+          transports: ['websocket', 'polling'],
+        })
+
+        newSocket.on('connect', () => {
+          newSocket.emit('join_room', {
+            userId: state.user?.id,
+            partnerId: state.user?.partnerId,
+          })
+        })
+
+        useAuthStore.setState({ socket: newSocket })
+      },
+
+      disconnectSocket: () => {
+        const state = useAuthStore.getState()
+        if (state.socket) {
+          state.socket.emit('leave_room', {
+            userId: state.user?.id,
+            partnerId: state.user?.partnerId,
+          })
+          state.socket.disconnect()
+          useAuthStore.setState({ socket: null })
+        }
+      },
 
       login: async (username: string, password: string) => {
         set({ loading: true })
         try {
           const response = await authAPI.login({ username, password })
           const { token, user } = response.data
-          set({ token, user })
+          set({
+            token,
+            user,
+            partnerId: user.partnerId || null,
+            partner: (user as any).partner || null
+          })
           localStorage.setItem('token', token)
           Toast.show('登录成功')
         } catch (error: any) {
@@ -43,7 +87,12 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authAPI.register({ username, password, email })
           const { token, user } = response.data
-          set({ token, user })
+          set({
+            token,
+            user,
+            partnerId: user.partnerId || null,
+            partner: (user as any).partner || null
+          })
           localStorage.setItem('token', token)
           Toast.show('注册成功')
         } catch (error: any) {
@@ -58,7 +107,7 @@ export const useAuthStore = create<AuthState>()(
         set({ loading: true })
         try {
           const response = await authAPI.bindPartner({ inviteCode })
-          await get().loadProfile() // 刷新用户信息
+          await get().loadProfile()
           Toast.show(response.data.message || '绑定成功')
         } catch (error: any) {
           Toast.show(error.response?.data?.error || '绑定失败')
@@ -72,7 +121,7 @@ export const useAuthStore = create<AuthState>()(
         set({ loading: true })
         try {
           const response = await authAPI.unbindPartner()
-          await get().loadProfile() // 刷新用户信息
+          await get().loadProfile()
           Toast.show(response.data.message || '解绑成功')
         } catch (error: any) {
           Toast.show(error.response?.data?.error || '解绑失败')
@@ -83,7 +132,15 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        set({ token: null, user: null })
+        const state = useAuthStore.getState()
+        if (state.socket) {
+          state.socket.emit('leave_room', {
+            userId: state.user?.id,
+            partnerId: state.user?.partnerId,
+          })
+          state.socket.disconnect()
+        }
+        set({ token: null, user: null, partnerId: null, partner: null, socket: null })
         localStorage.removeItem('token')
         Toast.show('已退出登录')
       },
@@ -91,7 +148,12 @@ export const useAuthStore = create<AuthState>()(
       loadProfile: async () => {
         try {
           const response = await authAPI.getProfile()
-          set({ user: response.data })
+          const user = response.data
+          set({
+            user,
+            partnerId: user.partnerId || null,
+            partner: (user as any).partner || null
+          })
         } catch (error) {
           console.error('Failed to load profile:', error)
           throw error
@@ -100,7 +162,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ token: state.token, user: state.user }), // 只持久化token和用户信息
+      partialize: (state) => ({ token: state.token, user: state.user }),
     }
   )
 )

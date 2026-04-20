@@ -3,6 +3,7 @@ import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
 import { initDB } from './db';
+import { setupSocket } from './socket';
 import authRoutes from './routes/authRoutes';
 import timelineRoutes from './routes/timelineRoutes';
 import todoRoutes from './routes/todoRoutes';
@@ -37,12 +38,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-  });
-});
+setupSocket(io);
 
 // 初始化数据库后启动服务器
 initDB().then(() => {
