@@ -1,4 +1,12 @@
-import { initDB, exec } from './index';
+import { initDB, exec, db } from './index';
+
+const ensureColumn = async (table: string, column: string, ddl: string) => {
+  const columns = db.exec(`PRAGMA table_info(${table})`);
+  const hasColumn = columns[0]?.values.some((row: any[]) => row[1] === column);
+  if (!hasColumn) {
+    await exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+};
 
 async function initDatabase() {
   await initDB();
@@ -59,6 +67,7 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS expense_records (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       node_id INTEGER NOT NULL,
+      todo_id INTEGER,
       user_id INTEGER NOT NULL,
       type TEXT NOT NULL,
       amount DECIMAL(10,2) NOT NULL,
@@ -90,6 +99,7 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS attachments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       node_id INTEGER NOT NULL,
+      todo_id INTEGER,
       user_id INTEGER NOT NULL,
       file_name TEXT NOT NULL,
       file_path TEXT NOT NULL,
@@ -100,6 +110,11 @@ async function initDatabase() {
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
+
+  await ensureColumn('expense_records', 'todo_id', 'todo_id INTEGER');
+  await ensureColumn('attachments', 'todo_id', 'todo_id INTEGER');
+  await exec('CREATE INDEX IF NOT EXISTS idx_expense_records_todo_id ON expense_records(todo_id)');
+  await exec('CREATE INDEX IF NOT EXISTS idx_attachments_todo_id ON attachments(todo_id)');
 
   // 操作日志表
   await exec(`
