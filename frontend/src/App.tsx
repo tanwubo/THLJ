@@ -1,6 +1,10 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import Login from './pages/Login/Login'
+import Timeline from './pages/Timeline/Timeline'
+import Statistics from './pages/Statistics/Statistics'
+import Settings from './pages/Settings/Settings'
+import NodeDetail from './pages/NodeDetail/NodeDetail'
 import { useAuthStore } from './store/authStore'
 
 // 受保护的路由组件
@@ -16,7 +20,6 @@ function App() {
   const { token, loadProfile } = useAuthStore()
 
   useEffect(() => {
-    // 如果有token，加载用户信息
     if (token) {
       loadProfile().catch(() => {
         // 加载失败会自动跳转到登录页
@@ -29,10 +32,22 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={
         <ProtectedRoute>
-          <div className="text-center py-20">
-            <h1 className="text-2xl font-bold text-wedding-red">💒 婚嫁管家</h1>
-            <p className="text-gray-600 mt-4">登录成功！功能开发中...</p>
-          </div>
+          <Timeline />
+        </ProtectedRoute>
+      } />
+      <Route path="/statistics" element={
+        <ProtectedRoute>
+          <Statistics />
+        </ProtectedRoute>
+      } />
+      <Route path="/settings" element={
+        <ProtectedRoute>
+          <Settings />
+        </ProtectedRoute>
+      } />
+      <Route path="/node/:id" element={
+        <ProtectedRoute>
+          <NodeDetail />
         </ProtectedRoute>
       } />
     </Routes>

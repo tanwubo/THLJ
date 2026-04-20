@@ -73,22 +73,35 @@ export interface TimelineNode {
   updatedAt: string
 }
 
+export interface CreateNodeData {
+  name: string
+  description?: string
+  deadline?: string
+}
+
+export interface UpdateNodeData {
+  name?: string
+  description?: string
+  deadline?: string
+  status?: string
+}
+
 // 时间线相关API
 export const timelineAPI = {
   getTimeline: () =>
     api.get<{ nodes: TimelineNode[]; overallProgress: number }>('/timeline'),
 
-  createNode: (data: { name: string; description?: string; deadline?: string }) =>
+  createNode: (data: CreateNodeData) =>
     api.post<TimelineNode>('/timeline', data),
 
-  updateNode: (id: number, data: Partial<TimelineNode>) =>
+  updateNode: (id: number, data: UpdateNodeData) =>
     api.put<TimelineNode>(`/timeline/${id}`, data),
 
   deleteNode: (id: number) =>
     api.delete(`/timeline/${id}`),
 
-  updateOrder: (data: { nodes: { id: number; order: number }[] }) =>
-    api.post('/timeline/update-order', data),
+  updateOrder: (nodes: { id: number; order: number }[]) =>
+    api.post('/timeline/update-order', { nodes }),
 }
 
 export default api
