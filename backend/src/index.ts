@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import { initDB } from './db';
 import authRoutes from './routes/authRoutes';
 import timelineRoutes from './routes/timelineRoutes';
+import todoRoutes from './routes/todoRoutes';
 
 const app = express();
 const server = http.createServer(app);
@@ -24,6 +25,7 @@ app.use(express.static('public'));
 // 路由
 app.use('/api/auth', authRoutes);
 app.use('/api/timeline', timelineRoutes);
+app.use('/api/todos', todoRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
