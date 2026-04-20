@@ -1,5 +1,5 @@
 import express from 'express'
-import { register, login, bindPartner, unbindPartner, getProfile } from '../controllers/authController'
+import { register, login, bindPartner, unbindPartner, getProfile, exportBackup } from '../controllers/authController'
 import { authMiddleware } from '../middleware/auth'
 
 const router = express.Router()
@@ -12,5 +12,6 @@ router.post('/login', login)
 router.post('/bind-partner', authMiddleware, bindPartner)
 router.post('/unbind-partner', authMiddleware, unbindPartner)
 router.get('/profile', authMiddleware, getProfile)
+router.get('/backup', authMiddleware, exportBackup)
 
 export default router

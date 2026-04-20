@@ -236,6 +236,84 @@ export async function unbindPartner(req: AuthRequest, res: Response) {
   }
 }
 
+// 导出所有用户数据备份
+export async function exportBackup(req: AuthRequest, res: Response) {
+  const userId = req.user?.id
+  if (!userId) {
+    return res.status(401).json({ error: '未授权访问' })
+  }
+
+  try {
+    // 获取用户信息
+    const users = query('SELECT id, username, email, invite_code, partner_id, created_at, last_login FROM users WHERE id = ?', [userId])
+    if (users.length === 0) {
+      return res.status(404).json({ error: '用户不存在' })
+    }
+
+    // 获取时间线节点
+    const nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order"', [userId])
+
+    // 获取所有节点的待办
+    const nodeIds = nodes.map((n: any) => n.id)
+    const todos = nodeIds.length > 0
+      ? query(`SELECT * FROM todo_items WHERE node_id IN (${nodeIds.map(() => '?').join(',')})`, nodeIds)
+      : []
+
+    // 获取所有节点的费用记录
+    const expenses = nodeIds.length > 0
+      ? query(`SELECT * FROM expense_records WHERE node_id IN (${nodeIds.map(() => '?').join(',')})`, nodeIds)
+      : []
+
+    // 获取所有节点的备忘录
+    const memos = nodeIds.length > 0
+      ? query(`SELECT * FROM memos WHERE node_id IN (${nodeIds.map(() => '?').join(',')})`, nodeIds)
+      : []
+
+    // 获取所有节点的附件信息
+    const attachments = nodeIds.length > 0
+      ? query(`SELECT * FROM attachments WHERE node_id IN (${nodeIds.map(() => '?').join(',')})`, nodeIds)
+      : []
+
+    const user = users[0]
+
+    // 如果有伴侣，获取伴侣信息
+    let partner = null
+    if (user.partner_id) {
+      const partnerInfo = query('SELECT id, username, email FROM users WHERE id = ?', [user.partner_id])
+      if (partnerInfo.length > 0) {
+        partner = {
+          id: partnerInfo[0].id,
+          username: partnerInfo[0].username,
+          email: partnerInfo[0].email
+        }
+      }
+    }
+
+    res.json({
+      exportTime: new Date().toISOString(),
+      version: '1.0',
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        inviteCode: user.invite_code,
+        partnerId: user.partner_id,
+        partner,
+        createdAt: user.created_at,
+        lastLogin: user.last_login
+      },
+      nodes,
+      todos,
+      expenses,
+      memos,
+      attachments
+    })
+  } catch (error) {
+    console.error('Export backup error:', error)
+    res.status(500).json({ error: '导出备份失败' })
+  }
+}
+
 // 获取用户信息
 export async function getProfile(req: AuthRequest, res: Response) {
   const userId = req.user?.id

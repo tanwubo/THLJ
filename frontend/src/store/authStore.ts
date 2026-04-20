@@ -33,9 +33,14 @@ export const useAuthStore = create<AuthState>()(
 
       connectSocket: () => {
         const state = useAuthStore.getState()
-        if (!state.user?.partnerId || state.socket) return
+        if (!state.user?.partnerId || state.socket || !state.token) return
 
-        const newSocket = io(window.location.origin, {
+        const socketUrl = process.env.NODE_ENV === 'production'
+          ? window.location.origin
+          : 'http://localhost:3001'
+
+        const newSocket = io(socketUrl, {
+          auth: { token: state.token },
           transports: ['websocket', 'polling'],
         })
 

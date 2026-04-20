@@ -13,16 +13,22 @@ import attachmentRoutes from './routes/attachmentRoutes';
 
 const app = express();
 const server = http.createServer(app);
+
+const corsOrigins = process.env.NODE_ENV === 'production'
+  ? ['https://yourdomain.com']
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: corsOrigins,
+    credentials: true,
     methods: ["GET", "POST"]
   }
 });
 
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(express.json());
 app.use(express.static('public'));
 

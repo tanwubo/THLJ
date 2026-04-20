@@ -39,7 +39,7 @@ export const getTimeline = async (req: Request, res: Response) => {
       const todos = query('SELECT * FROM todo_items WHERE node_id = ?', [node.id]);
       const completed = todos.filter((t: any) => t.status === 'completed').length;
       const progress = todos.length > 0 ? Math.round((completed / todos.length) * 100) : 0;
-      return { ...node, progress };
+      return { ...node, progress, todos };
     });
 
     // 计算整体进度

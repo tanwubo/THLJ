@@ -67,8 +67,12 @@ export const uploadAttachment = async (req: Request, res: Response) => {
     await ensureUploadDir();
 
     const fileName = `${Date.now()}-${file.originalname}`;
-    const filePath = `/uploads/${fileName}`;
+    const targetPath = path.join(UPLOAD_DIR, fileName);
 
+    // 将临时文件移动到目标位置
+    await fs.rename(file.path, targetPath);
+
+    const filePath = `/uploads/${fileName}`;
     const result = await run(
       'INSERT INTO attachments (node_id, user_id, file_name, file_path, file_size, file_type) VALUES (?, ?, ?, ?, ?, ?)',
       [nodeId, userId, file.originalname, filePath, file.size, file.mimetype]

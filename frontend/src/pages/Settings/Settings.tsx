@@ -65,13 +65,8 @@ export default function Settings() {
   const handleBackup = async () => {
     try {
       Toast.show('正在导出数据...')
-      // 获取所有数据
-      const data = {
-        exportTime: new Date().toISOString(),
-        user: user,
-        // 实际应包含所有节点数据
-      }
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const res = await authAPI.getBackup()
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

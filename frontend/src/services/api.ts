@@ -20,6 +20,8 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
+      // 通知 authStore 清理状态
+      window.dispatchEvent(new Event('auth:logout'))
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -58,6 +60,9 @@ export const authAPI = {
 
   getProfile: () =>
     api.get<User>('/auth/profile'),
+
+  getBackup: () =>
+    api.get('/auth/backup'),
 }
 
 // 时间线节点类型定义
