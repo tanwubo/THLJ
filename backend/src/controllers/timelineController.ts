@@ -158,3 +158,37 @@ export const updateNodeOrder = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: '更新顺序失败' });
   }
 };
+
+export const getNodeWorkbench = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    const nodes = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, userId]);
+    if (nodes.length === 0) {
+      return res.status(404).json({ error: '节点不存在' });
+    }
+
+    const todos = query('SELECT * FROM todo_items WHERE node_id = ? ORDER BY created_at DESC', [id]);
+    const todoIds = todos.map((todo: any) => todo.id);
+
+    const expenses = todoIds.length
+      ? query(`SELECT * FROM expense_records WHERE todo_id IN (${todoIds.map(() => '?').join(',')})`, todoIds)
+      : [];
+    const attachments = todoIds.length
+      ? query(`SELECT * FROM attachments WHERE todo_id IN (${todoIds.map(() => '?').join(',')})`, todoIds)
+      : [];
+    const memo = query('SELECT * FROM memos WHERE node_id = ? ORDER BY updated_at DESC LIMIT 1', [id])[0] || null;
+
+    const groupedTodos = todos.map((todo: any) => ({
+      ...todo,
+      expenses: expenses.filter((expense: any) => expense.todo_id === todo.id),
+      attachments: attachments.filter((attachment: any) => attachment.todo_id === todo.id),
+    }));
+
+    res.json({ node: nodes[0], todos: groupedTodos, memo });
+  } catch (error: any) {
+    console.error('获取工作台失败:', error);
+    res.status(500).json({ error: '获取工作台失败' });
+  }
+};

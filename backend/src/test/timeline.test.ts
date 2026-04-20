@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { getNodeWorkbench } from '../controllers/timelineController'
 
 // Mock the db module
 vi.mock('../db', () => ({
@@ -148,5 +149,45 @@ describe('Node Status Types', () => {
     expect(validStatuses).toContain('in_progress')
     expect(validStatuses).toContain('completed')
     expect(validStatuses).toContain('cancelled')
+  })
+})
+
+describe('Workbench aggregation', () => {
+  it('returns a node workbench payload grouped by todo', async () => {
+    const queryMock = query as unknown as ReturnType<typeof vi.fn>
+    queryMock.mockImplementation((sql: string) => {
+      if (sql.includes('FROM timeline_nodes')) {
+        return [{ id: 1, name: '确定结婚意向', status: 'pending' }]
+      }
+      if (sql.includes('FROM todo_items')) {
+        return [{ id: 11, node_id: 1, content: '沟通彩礼金额' }]
+      }
+      if (sql.includes('FROM expense_records')) {
+        return [{ id: 21, todo_id: 11, amount: 5200 }]
+      }
+      if (sql.includes('FROM attachments')) {
+        return [{ id: 31, todo_id: 11, file_name: '报价单.pdf' }]
+      }
+      if (sql.includes('FROM memos')) {
+        return [{ id: 41, node_id: 1, content: 'memo' }]
+      }
+      return []
+    })
+
+    const json = vi.fn()
+    const status = vi.fn().mockReturnValue({ json })
+    const res = { status, json } as any
+    const req = { params: { id: '1' }, user: { id: 99 } } as any
+
+    await getNodeWorkbench(req, res)
+
+    const payload = json.mock.calls[0][0]
+
+    expect(payload.node).toEqual({ id: 1, name: '确定结婚意向', status: 'pending' })
+    expect(payload.todos).toHaveLength(1)
+    expect(payload.todos[0].id).toBe(11)
+    expect(payload.todos[0].expenses[0].todo_id).toBe(payload.todos[0].id)
+    expect(payload.todos[0].attachments[0].todo_id).toBe(payload.todos[0].id)
+    expect(payload.memo).toEqual({ id: 41, node_id: 1, content: 'memo' })
   })
 })
