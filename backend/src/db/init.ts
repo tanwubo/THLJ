@@ -1,18 +1,57 @@
 import { initDB, exec, db } from './index';
 
-const ensureColumn = async (table: string, column: string, ddl: string) => {
-  const columns = db.exec(`PRAGMA table_info(${table})`);
+type SchemaAdapter = {
+  exec: (sql: string) => any[];
+  run: (sql: string) => unknown | Promise<unknown>;
+};
+
+const ensureColumn = async (adapter: SchemaAdapter, table: string, column: string, ddl: string) => {
+  const columns = adapter.exec(`PRAGMA table_info(${table})`);
   const hasColumn = columns[0]?.values.some((row: any[]) => row[1] === column);
   if (!hasColumn) {
-    await exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+    await adapter.run(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
   }
 };
 
-async function initDatabase() {
-  await initDB();
+const expenseRecordsTableSql = `
+    CREATE TABLE IF NOT EXISTS expense_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      node_id INTEGER NOT NULL,
+      todo_id INTEGER,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      amount DECIMAL(10,2) NOT NULL,
+      category TEXT NOT NULL,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (node_id) REFERENCES timeline_nodes(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `;
 
+const attachmentsTableSql = `
+    CREATE TABLE IF NOT EXISTS attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      node_id INTEGER NOT NULL,
+      todo_id INTEGER,
+      user_id INTEGER NOT NULL,
+      file_name TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      file_type TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (node_id) REFERENCES timeline_nodes(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `;
+
+const expenseRecordsTodoIndexSql = 'CREATE INDEX IF NOT EXISTS idx_expense_records_todo_id ON expense_records(todo_id)';
+const attachmentsTodoIndexSql = 'CREATE INDEX IF NOT EXISTS idx_attachments_todo_id ON attachments(todo_id)';
+
+export async function applyWorkbenchSchema(adapter: SchemaAdapter) {
   // 用户表
-  await exec(`
+  await adapter.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -29,7 +68,7 @@ async function initDatabase() {
   `);
 
   // 时间线节点表
-  await exec(`
+  await adapter.run(`
     CREATE TABLE IF NOT EXISTS timeline_nodes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -45,7 +84,7 @@ async function initDatabase() {
   `);
 
   // 待办事项表
-  await exec(`
+  await adapter.run(`
     CREATE TABLE IF NOT EXISTS todo_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       node_id INTEGER NOT NULL,
@@ -63,25 +102,10 @@ async function initDatabase() {
   `);
 
   // 费用记录表
-  await exec(`
-    CREATE TABLE IF NOT EXISTS expense_records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      node_id INTEGER NOT NULL,
-      todo_id INTEGER,
-      user_id INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      amount DECIMAL(10,2) NOT NULL,
-      category TEXT NOT NULL,
-      description TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (node_id) REFERENCES timeline_nodes(id),
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-  `);
+  await adapter.run(expenseRecordsTableSql);
 
   // 备忘录表
-  await exec(`
+  await adapter.run(`
     CREATE TABLE IF NOT EXISTS memos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       node_id INTEGER NOT NULL,
@@ -95,29 +119,15 @@ async function initDatabase() {
   `);
 
   // 附件表
-  await exec(`
-    CREATE TABLE IF NOT EXISTS attachments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      node_id INTEGER NOT NULL,
-      todo_id INTEGER,
-      user_id INTEGER NOT NULL,
-      file_name TEXT NOT NULL,
-      file_path TEXT NOT NULL,
-      file_size INTEGER NOT NULL,
-      file_type TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (node_id) REFERENCES timeline_nodes(id),
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-  `);
+  await adapter.run(attachmentsTableSql);
 
-  await ensureColumn('expense_records', 'todo_id', 'todo_id INTEGER');
-  await ensureColumn('attachments', 'todo_id', 'todo_id INTEGER');
-  await exec('CREATE INDEX IF NOT EXISTS idx_expense_records_todo_id ON expense_records(todo_id)');
-  await exec('CREATE INDEX IF NOT EXISTS idx_attachments_todo_id ON attachments(todo_id)');
+  await ensureColumn(adapter, 'expense_records', 'todo_id', 'todo_id INTEGER');
+  await ensureColumn(adapter, 'attachments', 'todo_id', 'todo_id INTEGER');
+  await adapter.run(expenseRecordsTodoIndexSql);
+  await adapter.run(attachmentsTodoIndexSql);
 
   // 操作日志表
-  await exec(`
+  await adapter.run(`
     CREATE TABLE IF NOT EXISTS operation_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -129,13 +139,23 @@ async function initDatabase() {
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
+}
+
+async function initDatabase() {
+  await initDB();
+  await applyWorkbenchSchema({
+    exec: sql => db.exec(sql),
+    run: sql => exec(sql),
+  });
 
   console.log('Database initialized successfully');
   process.exit(0);
 }
 
-initDatabase().catch(error => {
-  console.error('Failed to initialize database:', error);
-  process.exit(1);
-});
+if (require.main === module) {
+  initDatabase().catch(error => {
+    console.error('Failed to initialize database:', error);
+    process.exit(1);
+  });
+}
 
