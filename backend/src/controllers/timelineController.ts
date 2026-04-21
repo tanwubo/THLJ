@@ -19,19 +19,20 @@ const DEFAULT_NODES = [
 export const getTimeline = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
 
     // 检查用户是否有节点
-    let nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [userId]);
+    let nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [dataOwnerId]);
 
     // 首次登录，自动创建9个标准节点
     if (nodes.length === 0) {
       for (const node of DEFAULT_NODES) {
         await run(
           'INSERT INTO timeline_nodes (user_id, name, "order", status) VALUES (?, ?, ?, ?)',
-          [userId, node.name, node.order, 'pending']
+          [dataOwnerId, node.name, node.order, 'pending']
         );
       }
-      nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [userId]);
+      nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [dataOwnerId]);
     }
 
     // 计算每个节点的进度（基于待办完成情况）
@@ -57,6 +58,7 @@ export const getTimeline = async (req: AuthRequest, res: Response) => {
 export const createNode = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { name, description, deadline } = req.body;
 
     if (!name || !name.trim()) {
@@ -64,12 +66,12 @@ export const createNode = async (req: AuthRequest, res: Response) => {
     }
 
     // 获取当前最大 order
-    const maxOrder = query('SELECT MAX("order") as max FROM timeline_nodes WHERE user_id = ?', [userId]);
+    const maxOrder = query('SELECT MAX("order") as max FROM timeline_nodes WHERE user_id = ?', [dataOwnerId]);
     const newOrder = (maxOrder[0]?.max || 0) + 1;
 
     const result = await run(
       'INSERT INTO timeline_nodes (user_id, name, description, deadline, "order", status) VALUES (?, ?, ?, ?, ?, ?)',
-      [userId, name.trim(), description || null, deadline || null, newOrder, 'pending']
+      [dataOwnerId, name.trim(), description || null, deadline || null, newOrder, 'pending']
     );
 
     const node = query('SELECT * FROM timeline_nodes WHERE id = ?', [result.lastInsertRowid]);
@@ -84,11 +86,12 @@ export const createNode = async (req: AuthRequest, res: Response) => {
 export const updateNode = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
     const { name, description, deadline, status } = req.body;
 
     // 验证节点归属
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, userId]);
+    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, dataOwnerId]);
     if (node.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }
@@ -103,7 +106,7 @@ export const updateNode = async (req: AuthRequest, res: Response) => {
 
     if (updates.length > 0) {
       updates.push('updated_at = CURRENT_TIMESTAMP');
-      values.push(id, userId);
+      values.push(id, dataOwnerId);
       await run(`UPDATE timeline_nodes SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, values);
     }
 
@@ -119,10 +122,11 @@ export const updateNode = async (req: AuthRequest, res: Response) => {
 export const deleteNode = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
 
     // 验证节点归属
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, userId]);
+    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, dataOwnerId]);
     if (node.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }
@@ -132,7 +136,7 @@ export const deleteNode = async (req: AuthRequest, res: Response) => {
     await run('DELETE FROM expense_records WHERE node_id = ?', [id]);
     await run('DELETE FROM memos WHERE node_id = ?', [id]);
     await run('DELETE FROM attachments WHERE node_id = ?', [id]);
-    await run('DELETE FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, userId]);
+    await run('DELETE FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, dataOwnerId]);
 
     res.json({ success: true });
   } catch (error: any) {
@@ -145,11 +149,12 @@ export const deleteNode = async (req: AuthRequest, res: Response) => {
 export const updateNodeOrder = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { nodes } = req.body; // [{id, order}]
 
     for (const item of nodes) {
       await run('UPDATE timeline_nodes SET "order" = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
-        [item.order, item.id, userId]);
+        [item.order, item.id, dataOwnerId]);
     }
 
     res.json({ success: true });
@@ -162,9 +167,10 @@ export const updateNodeOrder = async (req: AuthRequest, res: Response) => {
 export const getNodeWorkbench = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
 
-    const nodes = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, userId]);
+    const nodes = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, dataOwnerId]);
     if (nodes.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }

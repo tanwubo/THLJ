@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware/auth';
 export const getTodos = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { nodeId } = req.query;
 
     if (!nodeId) {
@@ -12,7 +13,7 @@ export const getTodos = async (req: AuthRequest, res: Response) => {
     }
 
     // 验证节点归属
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, userId]);
+    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, dataOwnerId]);
     if (node.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }
@@ -36,6 +37,7 @@ export const getTodos = async (req: AuthRequest, res: Response) => {
 export const createTodo = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { nodeId, content, assigneeId, deadline } = req.body;
 
     if (!nodeId || !content) {
@@ -43,7 +45,7 @@ export const createTodo = async (req: AuthRequest, res: Response) => {
     }
 
     // 验证节点归属
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, userId]);
+    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, dataOwnerId]);
     if (node.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }
@@ -64,10 +66,11 @@ export const createTodo = async (req: AuthRequest, res: Response) => {
 export const updateTodo = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
     const { content, assigneeId, deadline, status } = req.body;
 
-    const todo = query('SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?', [id, userId]);
+    const todo = query('SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?', [id, dataOwnerId]);
     if (todo.length === 0) {
       return res.status(404).json({ error: '待办不存在' });
     }
@@ -97,9 +100,10 @@ export const updateTodo = async (req: AuthRequest, res: Response) => {
 export const deleteTodo = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
 
-    const todo = query('SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?', [id, userId]);
+    const todo = query('SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?', [id, dataOwnerId]);
     if (todo.length === 0) {
       return res.status(404).json({ error: '待办不存在' });
     }
@@ -120,10 +124,11 @@ export const deleteTodo = async (req: AuthRequest, res: Response) => {
 export const updateTodoStatus = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
     const { status } = req.body;
 
-    const todo = query('SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?', [id, userId]);
+    const todo = query('SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?', [id, dataOwnerId]);
     if (todo.length === 0) {
       return res.status(404).json({ error: '待办不存在' });
     }

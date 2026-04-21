@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+vi.mock('../db', () => ({
+  query: vi.fn(),
+}))
+
 vi.mock('jsonwebtoken', () => ({
   default: {
     verify: vi.fn(),
@@ -7,14 +11,18 @@ vi.mock('jsonwebtoken', () => ({
 }))
 
 import jwt from 'jsonwebtoken'
+import { query } from '../db'
 import {
   createSocketAuthMiddleware,
   createSocketEventRegistrar,
 } from '../socket'
 
+const queryMock = query as unknown as ReturnType<typeof vi.fn>
+
 describe('socket authentication', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    queryMock.mockReset()
   })
 
   it('accepts a valid token and stores the authenticated user on the socket', () => {
@@ -23,6 +31,9 @@ describe('socket authentication', () => {
       username: 'alice',
       partnerId: 8,
     })
+    queryMock.mockReturnValue([
+      { id: 7, username: 'alice', partner_id: 8, data_owner_id: 8 },
+    ])
 
     const socket = {
       handshake: { auth: { token: 'valid-token' } },
@@ -36,6 +47,7 @@ describe('socket authentication', () => {
       id: 7,
       username: 'alice',
       partnerId: 8,
+      dataOwnerId: 8,
     })
     expect(next).toHaveBeenCalledWith()
   })
@@ -53,6 +65,7 @@ describe('socket authentication', () => {
 describe('socket event registration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    queryMock.mockReset()
   })
 
   it('joins the authenticated pair room instead of trusting the client payload', () => {

@@ -24,13 +24,14 @@ function parseTodoId(input: unknown): { todoId?: number; error?: string } {
 export const getExpenses = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { nodeId } = req.query;
 
     if (!nodeId) {
       return res.status(400).json({ error: 'nodeId is required' });
     }
 
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, userId]);
+    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, dataOwnerId]);
     if (node.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }
@@ -62,6 +63,7 @@ export const getExpenses = async (req: AuthRequest, res: Response) => {
 export const createExpense = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const body = req.body ?? {};
     const querySource = req.query ?? {};
     const todoCheck = parseTodoId(body.todoId ?? querySource.todoId);
@@ -77,7 +79,7 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
 
     const todo = query(
       'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?',
-      [todoCheck.todoId, userId]
+      [todoCheck.todoId, dataOwnerId]
     );
     if (todo.length === 0) {
       return res.status(404).json({ error: '待办不存在' });
@@ -99,10 +101,11 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
 export const updateExpense = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
     const { type, amount, category, description } = req.body;
 
-    const expense = query('SELECT * FROM expense_records e JOIN timeline_nodes n ON e.node_id = n.id WHERE e.id = ? AND n.user_id = ?', [id, userId]);
+    const expense = query('SELECT * FROM expense_records e JOIN timeline_nodes n ON e.node_id = n.id WHERE e.id = ? AND n.user_id = ?', [id, dataOwnerId]);
     if (expense.length === 0) {
       return res.status(404).json({ error: '费用不存在' });
     }
@@ -132,9 +135,10 @@ export const updateExpense = async (req: AuthRequest, res: Response) => {
 export const deleteExpense = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
 
-    const expense = query('SELECT * FROM expense_records e JOIN timeline_nodes n ON e.node_id = n.id WHERE e.id = ? AND n.user_id = ?', [id, userId]);
+    const expense = query('SELECT * FROM expense_records e JOIN timeline_nodes n ON e.node_id = n.id WHERE e.id = ? AND n.user_id = ?', [id, dataOwnerId]);
     if (expense.length === 0) {
       return res.status(404).json({ error: '费用不存在' });
     }

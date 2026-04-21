@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { Server, Socket } from 'socket.io'
+import { getUserPartnershipState } from '../services/partnership'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'wedding-manager-secret'
 const REALTIME_EVENTS = [
@@ -16,6 +17,7 @@ interface SocketUser {
   id: number
   username: string
   partnerId?: number | null
+  dataOwnerId?: number
 }
 
 interface RealtimePayload {
@@ -45,10 +47,16 @@ export function createSocketAuthMiddleware(socket: AuthenticatedSocket, next: (e
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as SocketUser
+    const currentUser = getUserPartnershipState(decoded.id)
+    if (!currentUser) {
+      next(new Error('实时连接认证失败'))
+      return
+    }
     socket.data.user = {
-      id: decoded.id,
-      username: decoded.username,
-      partnerId: decoded.partnerId ?? null,
+      id: currentUser.id,
+      username: currentUser.username,
+      partnerId: currentUser.partnerId ?? null,
+      dataOwnerId: currentUser.dataOwnerId,
     }
     next()
   } catch {

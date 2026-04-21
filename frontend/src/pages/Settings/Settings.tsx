@@ -12,11 +12,10 @@ import { useTheme } from '../../theme/useTheme'
 
 export default function Settings() {
   const navigate = useNavigate()
-  const { user, logout, loadProfile } = useAuthStore()
+  const { user, logout, bindPartner, unbindPartner, loading } = useAuthStore()
   const { theme, setTheme } = useTheme()
   const [showBind, setShowBind] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
-  const [loading, setLoading] = useState(false)
 
   const handleLogout = () => {
     Dialog.confirm({
@@ -35,20 +34,15 @@ export default function Settings() {
     }
 
     Dialog.confirm({
-      content: '绑定后将同步并使用对方的数据，您当前的数据将被覆盖替换。确定要绑定吗？',
+      content: '绑定后，双方将共用同一份筹备数据。当前版本中，输入谁的邀请码，就会保留谁当前的数据作为绑定后的共享数据；另一方当前数据不会自动合并。确定继续绑定吗？',
       confirmText: '确定绑定',
       onConfirm: async () => {
-        setLoading(true)
         try {
-          await authAPI.bindPartner({ inviteCode: inviteCode.trim() })
-          Toast.show('绑定成功')
+          await bindPartner(inviteCode.trim())
           setShowBind(false)
           setInviteCode('')
-          await loadProfile()
         } catch (error: any) {
           Toast.show(error.response?.data?.error || '绑定失败')
-        } finally {
-          setLoading(false)
         }
       },
     })
@@ -59,9 +53,7 @@ export default function Settings() {
       content: '确定解除绑定？解除后双方数据仍然保留，但不再同步。',
       onConfirm: async () => {
         try {
-          await authAPI.unbindPartner()
-          Toast.show('已解除绑定')
-          await loadProfile()
+          await unbindPartner()
         } catch (error: any) {
           Toast.show(error.response?.data?.error || '解除失败')
         }
@@ -150,6 +142,7 @@ export default function Settings() {
           {user?.partnerId ? (
             <div className="settings-stack">
               <p className="section-copy">已绑定用户：{user.partner?.username}</p>
+              <p className="section-copy">想保留谁当前的筹备数据，就输入谁的邀请码进行绑定。</p>
               <button type="button" className="brand-secondary-button" onClick={handleUnbindPartner}>
                 解除绑定
               </button>
@@ -157,6 +150,7 @@ export default function Settings() {
           ) : (
             <div className="settings-stack">
               <p className="section-copy">将您的邀请码发送给另一半，或输入对方的邀请码进行绑定。</p>
+              <p className="section-copy">想保留谁当前的筹备数据，就输入谁的邀请码进行绑定。</p>
               {showBind ? (
                 <>
                   <label className="auth-form__field">

@@ -31,13 +31,14 @@ async function ensureUploadDir() {
 export const getAttachments = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { nodeId } = req.query;
 
     if (!nodeId) {
       return res.status(400).json({ error: 'nodeId is required' });
     }
 
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, userId]);
+    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, dataOwnerId]);
     if (node.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }
@@ -57,6 +58,7 @@ export const getAttachments = async (req: AuthRequest, res: Response) => {
 export const uploadAttachment = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const body = req.body ?? {};
     const querySource = req.query ?? {};
     const todoCheck = parseTodoId(body.todoId ?? querySource.todoId);
@@ -72,7 +74,7 @@ export const uploadAttachment = async (req: AuthRequest, res: Response) => {
 
     const todo = query(
       'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?',
-      [todoCheck.todoId, userId]
+      [todoCheck.todoId, dataOwnerId]
     );
     if (todo.length === 0) {
       return res.status(404).json({ error: '待办不存在' });
@@ -109,9 +111,10 @@ export const uploadAttachment = async (req: AuthRequest, res: Response) => {
 export const deleteAttachment = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
 
-    const attachment = query('SELECT * FROM attachments a JOIN timeline_nodes n ON a.node_id = n.id WHERE a.id = ? AND n.user_id = ?', [id, userId]);
+    const attachment = query('SELECT * FROM attachments a JOIN timeline_nodes n ON a.node_id = n.id WHERE a.id = ? AND n.user_id = ?', [id, dataOwnerId]);
     if (attachment.length === 0) {
       return res.status(404).json({ error: '附件不存在' });
     }

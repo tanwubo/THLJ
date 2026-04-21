@@ -1,9 +1,10 @@
 import { Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { run, query } from '../db'
+import { run, query, runInTransaction } from '../db'
 import { AuthRequest } from '../middleware/auth'
 import crypto from 'crypto'
+import { getUserPartnershipState, replaceUserDataFromOwner, requireUserPartnershipState } from '../services/partnership'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'wedding-manager-secret'
 const SALT_ROUNDS = 10
@@ -54,6 +55,7 @@ export async function register(req: AuthRequest, res: Response) {
     )
 
     const userId = result.lastInsertRowid
+    await run('UPDATE users SET data_owner_id = ? WHERE id = ?', [userId, userId])
 
     // 为新用户初始化默认时间线节点
     const defaultNodes = [
@@ -155,7 +157,7 @@ export async function bindPartner(req: AuthRequest, res: Response) {
 
   try {
     // 查询邀请码对应用户
-    const partnerUsers = query('SELECT id, partner_id, username FROM users WHERE invite_code = ?', [inviteCode])
+    const partnerUsers = query('SELECT id, partner_id, username, data_owner_id FROM users WHERE invite_code = ?', [inviteCode])
     if (partnerUsers.length === 0) {
       return res.status(400).json({ error: '邀请码不存在' })
     }
@@ -173,20 +175,21 @@ export async function bindPartner(req: AuthRequest, res: Response) {
     }
 
     // 自己已绑定其他账号
-    const currentUser = query('SELECT partner_id FROM users WHERE id = ?', [userId])[0]
-    if (currentUser.partner_id) {
+    const currentUser = requireUserPartnershipState(userId)
+    if (currentUser.partnerId) {
       return res.status(400).json({ error: '您已绑定其他账号，请先解绑' })
     }
 
-    // 执行双向绑定
-    await run('UPDATE users SET partner_id = ? WHERE id = ?', [partner.id, userId])
-    await run('UPDATE users SET partner_id = ? WHERE id = ?', [userId, partner.id])
+    const sharedOwnerId = partner.data_owner_id ?? partner.id
 
-    // 记录操作日志
-    await run(
-      'INSERT INTO operation_logs (user_id, operation_type, target_type, target_id, content) VALUES (?, ?, ?, ?, ?)',
-      [userId, 'bind_partner', 'user', partner.id, `与用户${partner.username}绑定成功`]
-    )
+    await runInTransaction([
+      { sql: 'UPDATE users SET partner_id = ?, data_owner_id = ? WHERE id = ?', params: [partner.id, sharedOwnerId, userId] },
+      { sql: 'UPDATE users SET partner_id = ?, data_owner_id = ? WHERE id = ?', params: [userId, sharedOwnerId, partner.id] },
+      {
+        sql: 'INSERT INTO operation_logs (user_id, operation_type, target_type, target_id, content) VALUES (?, ?, ?, ?, ?)',
+        params: [userId, 'bind_partner', 'user', partner.id, `与用户${partner.username}绑定成功`],
+      },
+    ])
 
     res.json({
       success: true,
@@ -211,23 +214,28 @@ export async function unbindPartner(req: AuthRequest, res: Response) {
   }
 
   try {
-    const currentUser = query('SELECT partner_id FROM users WHERE id = ?', [userId])[0]
-
-    if (!currentUser.partner_id) {
+    const currentUser = requireUserPartnershipState(userId)
+    if (!currentUser.partnerId) {
       return res.status(400).json({ error: '您尚未绑定任何账号' })
     }
 
-    const partnerId = currentUser.partner_id
+    const partner = requireUserPartnershipState(currentUser.partnerId)
 
-    // 执行双向解绑
-    await run('UPDATE users SET partner_id = NULL WHERE id = ?', [userId])
-    await run('UPDATE users SET partner_id = NULL WHERE id = ?', [partnerId])
+    const usersToRestore = [currentUser, partner]
+    for (const member of usersToRestore) {
+      if (member.dataOwnerId !== member.id) {
+        await replaceUserDataFromOwner(member.dataOwnerId, member.id)
+      }
+    }
 
-    // 记录操作日志
-    await run(
-      'INSERT INTO operation_logs (user_id, operation_type, target_type, target_id, content) VALUES (?, ?, ?, ?, ?)',
-      [userId, 'unbind_partner', 'user', partnerId, '与伴侣解绑成功']
-    )
+    await runInTransaction([
+      { sql: 'UPDATE users SET partner_id = NULL, data_owner_id = id WHERE id = ?', params: [currentUser.id] },
+      { sql: 'UPDATE users SET partner_id = NULL, data_owner_id = id WHERE id = ?', params: [partner.id] },
+      {
+        sql: 'INSERT INTO operation_logs (user_id, operation_type, target_type, target_id, content) VALUES (?, ?, ?, ?, ?)',
+        params: [userId, 'unbind_partner', 'user', partner.id, '与伴侣解绑成功'],
+      },
+    ])
 
     res.json({ success: true, message: '解绑成功' })
   } catch (error) {
@@ -239,6 +247,7 @@ export async function unbindPartner(req: AuthRequest, res: Response) {
 // 导出所有用户数据备份
 export async function exportBackup(req: AuthRequest, res: Response) {
   const userId = req.user?.id
+  const dataOwnerId = req.user?.dataOwnerId ?? userId
   if (!userId) {
     return res.status(401).json({ error: '未授权访问' })
   }
@@ -251,7 +260,7 @@ export async function exportBackup(req: AuthRequest, res: Response) {
     }
 
     // 获取时间线节点
-    const nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order"', [userId])
+    const nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order"', [dataOwnerId])
 
     // 获取所有节点的待办
     const nodeIds = nodes.map((n: any) => n.id)

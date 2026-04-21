@@ -5,13 +5,14 @@ import { AuthRequest } from '../middleware/auth';
 export const getMemo = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { nodeId } = req.query;
 
     if (!nodeId) {
       return res.status(400).json({ error: 'nodeId is required' });
     }
 
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, userId]);
+    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, dataOwnerId]);
     if (node.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }
@@ -27,13 +28,14 @@ export const getMemo = async (req: AuthRequest, res: Response) => {
 export const saveMemo = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { nodeId, content } = req.body;
 
     if (!nodeId) {
       return res.status(400).json({ error: 'nodeId is required' });
     }
 
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, userId]);
+    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, dataOwnerId]);
     if (node.length === 0) {
       return res.status(404).json({ error: '节点不存在' });
     }
