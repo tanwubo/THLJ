@@ -44,20 +44,25 @@ export const getAttachments = async (req: AuthRequest, res: Response) => {
 export const uploadAttachment = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { nodeId } = req.body;
+    const body = req.body ?? {};
+    const querySource = req.query ?? {};
+    const todoId = Number(body.todoId ?? querySource.todoId);
     const file = (req as any).file;
 
-    if (!nodeId) {
-      return res.status(400).json({ error: 'nodeId is required' });
+    if (!todoId) {
+      return res.status(400).json({ error: 'todoId 为必填项' });
     }
 
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [nodeId, userId]);
-    if (node.length === 0) {
-      return res.status(404).json({ error: '节点不存在' });
+    const todo = query(
+      'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?',
+      [todoId, userId]
+    );
+    if (todo.length === 0) {
+      return res.status(404).json({ error: '待办不存在' });
     }
 
     // 验证文件大小 (10MB)
@@ -76,7 +81,7 @@ export const uploadAttachment = async (req: AuthRequest, res: Response) => {
     const filePath = `/uploads/${fileName}`;
     const result = await run(
       'INSERT INTO attachments (node_id, user_id, file_name, file_path, file_size, file_type) VALUES (?, ?, ?, ?, ?, ?)',
-      [nodeId, userId, file.originalname, filePath, file.size, file.mimetype]
+      [todo[0].node_id, userId, file.originalname, filePath, file.size, file.mimetype]
     );
 
     const attachment = query('SELECT * FROM attachments WHERE id = ?', [result.lastInsertRowid]);

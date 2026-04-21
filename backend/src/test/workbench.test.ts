@@ -1,6 +1,24 @@
 import initSqlJs from 'sql.js'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { applyWorkbenchSchema } from '../db/init'
+import { createExpense } from '../controllers/expenseController'
+import { uploadAttachment } from '../controllers/attachmentController'
+
+vi.mock('../db', () => ({
+  query: vi.fn(),
+  run: vi.fn(),
+}))
+
+vi.mock('fs/promises', () => ({
+  default: {
+    access: vi.fn(),
+    mkdir: vi.fn(),
+    rename: vi.fn(),
+    unlink: vi.fn(),
+  },
+}))
+
+import { query, run } from '../db'
 
 describe('workbench schema contract', () => {
   it('adds todo_id support to expense and attachment tables', async () => {
@@ -61,5 +79,76 @@ describe('workbench schema contract', () => {
     expect(attachmentColumns).toContain('todo_id')
     expect(expenseIndexes).toContain('idx_expense_records_todo_id')
     expect(attachmentIndexes).toContain('idx_attachments_todo_id')
+  })
+})
+
+describe('Workbench validation', () => {
+  const queryMock = query as unknown as ReturnType<typeof vi.fn>
+  const runMock = run as unknown as ReturnType<typeof vi.fn>
+
+  function createResponse() {
+    const json = vi.fn()
+    const status = vi.fn().mockReturnValue({ json })
+    return { json, status, res: { json, status } as any }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    queryMock.mockReset()
+    runMock.mockReset()
+  })
+
+  it('rejects expense creation without todoId', async () => {
+    queryMock.mockImplementation((sql: string) => {
+      if (sql === 'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?') {
+        return [{ id: 1 }]
+      }
+      if (sql === 'SELECT * FROM expense_records WHERE id = ?') {
+        return [{ id: 101 }]
+      }
+      return []
+    })
+    runMock.mockResolvedValue({ lastInsertRowid: 101, changes: 1 })
+
+    const { json, status, res } = createResponse()
+    const req = {
+      body: { nodeId: 1, type: 'expense', amount: 100, category: '婚宴' },
+      user: { id: 99 },
+    } as any
+
+    await createExpense(req, res)
+
+    expect(status).toHaveBeenCalledWith(400)
+    expect(json).toHaveBeenCalledWith({ error: 'todoId 为必填项' })
+  })
+
+  it('rejects attachment upload without todoId', async () => {
+    queryMock.mockImplementation((sql: string) => {
+      if (sql === 'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?') {
+        return [{ id: 1 }]
+      }
+      if (sql === 'SELECT * FROM attachments WHERE id = ?') {
+        return [{ id: 201 }]
+      }
+      return []
+    })
+    runMock.mockResolvedValue({ lastInsertRowid: 201, changes: 1 })
+
+    const { json, status, res } = createResponse()
+    const req = {
+      body: { nodeId: 1 },
+      file: {
+        path: 'C:\\temp\\upload.tmp',
+        originalname: 'quote.pdf',
+        size: 1024,
+        mimetype: 'application/pdf',
+      },
+      user: { id: 99 },
+    } as any
+
+    await uploadAttachment(req, res)
+
+    expect(status).toHaveBeenCalledWith(400)
+    expect(json).toHaveBeenCalledWith({ error: 'todoId 为必填项' })
   })
 })
