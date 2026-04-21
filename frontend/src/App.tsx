@@ -11,7 +11,7 @@ import { useAuthStore } from './store/authStore'
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { token, _hasHydrated } = useAuthStore()
   if (!_hasHydrated) {
-    return <div className="min-h-screen flex items-center justify-center">加载中...</div>
+    return <div className="app-loading-screen">加载中...</div>
   }
   if (!token) {
     return <Navigate to="/login" replace />
