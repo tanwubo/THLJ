@@ -104,6 +104,8 @@ export const deleteTodo = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: '待办不存在' });
     }
 
+    await run('DELETE FROM attachments WHERE todo_id = ?', [id]);
+    await run('DELETE FROM expense_records WHERE todo_id = ?', [id]);
     await run('DELETE FROM todo_items WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (error: any) {

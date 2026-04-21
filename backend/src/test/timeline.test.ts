@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getNodeWorkbench } from '../controllers/timelineController'
+import { deleteTodo } from '../controllers/todoController'
 
 // Mock the db module
 vi.mock('../db', () => ({
@@ -291,5 +292,53 @@ describe('Workbench aggregation', () => {
     expect(payload.todos[1].expenses).toEqual([{ id: 22, todo_id: 12, amount: 3000 }])
     expect(payload.todos[1].attachments).toEqual([{ id: 32, todo_id: 12, file_name: '日期表.xlsx' }])
     expect(payload.memo).toEqual({ id: 41, node_id: 1, content: 'memo' })
+  })
+})
+
+describe('Todo deletion', () => {
+  const queryMock = query as unknown as ReturnType<typeof vi.fn>
+  const runMock = run as unknown as ReturnType<typeof vi.fn>
+
+  function createResponse() {
+    const json = vi.fn()
+    const status = vi.fn().mockReturnValue({ json })
+    return { json, status, res: { json, status } as any }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    queryMock.mockReset()
+    runMock.mockReset()
+  })
+
+  it('deletes todo-linked expenses and attachments when deleting a todo', async () => {
+    const deletedTables: string[] = []
+
+    queryMock.mockImplementation((sql: string) => {
+      if (sql === 'SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?') {
+        return [{ id: 7, node_id: 1 }]
+      }
+      return []
+    })
+
+    runMock.mockImplementation(async (sql: string) => {
+      if (sql === 'DELETE FROM attachments WHERE todo_id = ?') {
+        deletedTables.push('attachments')
+      }
+      if (sql === 'DELETE FROM expense_records WHERE todo_id = ?') {
+        deletedTables.push('expense_records')
+      }
+      if (sql === 'DELETE FROM todo_items WHERE id = ?') {
+        deletedTables.push('todo_items')
+      }
+      return { changes: 1 }
+    })
+
+    const { res } = createResponse()
+    const req = { params: { id: '7' }, user: { id: 99 } } as any
+
+    await deleteTodo(req, res)
+
+    expect(deletedTables).toEqual(['attachments', 'expense_records', 'todo_items'])
   })
 })
