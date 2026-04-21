@@ -123,6 +123,46 @@ describe('Timeline modal flows', () => {
     })
   })
 
+  it('renders create node as a full-width bottom drawer on mobile', async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query) => ({
+      matches: query === '(max-width: 767px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+
+    renderTimeline()
+
+    expect(await screen.findByText('订酒店')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '创建节点' }))
+
+    const drawer = await screen.findByTestId('mobile-node-editor-drawer')
+    expect(drawer).toBeInTheDocument()
+    expect(within(drawer).getByText('创建节点')).toBeInTheDocument()
+    expect(within(drawer).queryByText('节点状态')).toBeNull()
+    expect(document.querySelector('.adm-dialog')).toBeNull()
+  })
+
+  it('renders create node inside the shared dialog shell on desktop', async () => {
+    renderTimeline()
+
+    expect(await screen.findByText('订酒店')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '创建节点' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('创建节点')).toBeInTheDocument()
+    expect(within(dialog).getByText('New Node')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '取消' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '创建' })).toBeInTheDocument()
+    expect(within(dialog).queryByText('节点状态')).toBeNull()
+  })
+
   it('opens full edit from the three-dot menu and keeps the date picker flow', async () => {
     renderTimeline()
 
@@ -179,8 +219,10 @@ describe('Timeline modal flows', () => {
     fireEvent.click(screen.getByLabelText('更多操作'))
     fireEvent.click(screen.getByRole('button', { name: '完整编辑' }))
 
-    const drawer = await screen.findByTestId('mobile-full-edit-drawer')
+    const drawer = await screen.findByTestId('mobile-node-editor-drawer')
     expect(drawer).toBeInTheDocument()
+    expect(within(drawer).getByText('编辑节点')).toBeInTheDocument()
+    expect(within(drawer).getByText('节点状态')).toBeInTheDocument()
     expect(document.querySelector('.adm-dialog')).toBeNull()
   })
 
@@ -193,7 +235,7 @@ describe('Timeline modal flows', () => {
     fireEvent.click(screen.getByRole('button', { name: '完整编辑' }))
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    expect(screen.queryByTestId('mobile-full-edit-drawer')).toBeNull()
+    expect(screen.queryByTestId('mobile-node-editor-drawer')).toBeNull()
   })
 
   it('routes card clicks so only the non-inline area opens node detail', async () => {
