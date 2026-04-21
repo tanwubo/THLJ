@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Dialog, Input, Toast } from 'antd-mobile'
+import { Dialog, Input, Toast } from 'antd-mobile'
+import AppShell from '../../components/layout/AppShell'
+import BrandHeader from '../../components/layout/BrandHeader'
+import StatusPill from '../../components/ui/StatusPill'
+import SurfaceCard from '../../components/ui/SurfaceCard'
 import { DateField } from '../../components/DateField'
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { timelineAPI, TimelineNode } from '../../services/api'
@@ -47,6 +51,13 @@ export default function Timeline() {
 
   const handleNodeClick = (nodeId: number) => {
     navigate(`/node/${nodeId}`)
+  }
+
+  const handleNodeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, nodeId: number) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      handleNodeClick(nodeId)
+    }
   }
 
   const openCreateModal = () => {
@@ -152,156 +163,127 @@ export default function Timeline() {
     navigate('/login')
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return '✅ 已完成'
-      case 'in_progress':
-        return '🔄 进行中'
-      case 'cancelled':
-        return '❌ 已取消'
-      default:
-        return '⏳ 待处理'
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-700'
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-700'
-      case 'cancelled':
-        return 'bg-gray-100 text-gray-500'
-      default:
-        return 'bg-yellow-100 text-yellow-700'
-    }
-  }
+  const summaryTitle = partnerId ? `${user?.username ?? ''} · 双人筹备中` : `${user?.username ?? ''} · 单人筹备`
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-gray-500">加载中...</div>
-      </div>
-    )
+    return <div className="app-loading-screen">加载中...</div>
   }
 
   return (
-    <div className="timeline-shell bg-gray-50" data-testid="timeline-shell">
-      <div className="timeline-shell__header bg-wedding-red text-white p-4" data-testid="timeline-header">
-        <div className="flex justify-between items-center">
-          <h1 className="text-xl font-bold">💒 婚嫁管家</h1>
-          <button onClick={handleLogout} className="text-sm bg-white/20 px-3 py-1 rounded">
-            退出
-          </button>
-        </div>
-        <p className="text-sm mt-1">
-          {user?.username} {partnerId && '💑'}
-        </p>
-      </div>
-
-      <div className="timeline-shell__scroll" data-testid="timeline-scroll-region">
-        <div className="p-4">
-          {nodes.length === 0 ? (
-            <div className="text-center py-20">
-              <p className="text-gray-500 mb-4">还没有任何节点</p>
-              <Button onClick={openCreateModal} color="danger" size="large">
-                创建第一个节点
-              </Button>
+    <AppShell
+      withBottomNav
+      header={
+        <BrandHeader
+          eyebrow="Ceremony Planner"
+          title="婚礼时间线"
+          subtitle={summaryTitle}
+          aside={
+            <button type="button" className="brand-ghost-button" onClick={handleLogout}>
+              退出
+            </button>
+          }
+        />
+      }
+    >
+      <div className="timeline-page">
+        <SurfaceCard className="timeline-overview-card">
+          <div>
+            <p className="section-label">Overview</p>
+            <h2 className="section-title">把每个筹备阶段安排得更稳妥</h2>
+            <p className="section-copy">按节点推进进度、预算和协作事项，保持节奏清晰。</p>
+          </div>
+          <div className="timeline-overview-card__stats">
+            <div className="timeline-stat">
+              <span>节点总数</span>
+              <strong>{nodes.length}</strong>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {nodes.map((node) => (
+            <button type="button" className="brand-primary-button" onClick={openCreateModal}>
+              创建节点
+            </button>
+          </div>
+        </SurfaceCard>
+
+        {nodes.length === 0 ? (
+          <SurfaceCard className="timeline-empty-state">
+            <p className="timeline-empty-state__title">还没有任何节点</p>
+            <p className="timeline-empty-state__copy">先建立第一个里程碑，把婚礼筹备拆成清晰可执行的阶段。</p>
+            <button type="button" className="brand-primary-button" onClick={openCreateModal}>
+              创建第一个节点
+            </button>
+          </SurfaceCard>
+        ) : (
+          <div className="timeline-node-list">
+            {nodes.map((node) => (
+              <SurfaceCard key={node.id} className="timeline-node-card">
                 <div
-                  key={node.id}
+                  className="timeline-node-card__button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleNodeClick(node.id)}
-                  className="bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md transition"
+                  onKeyDown={(event) => handleNodeKeyDown(event, node.id)}
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium">{node.name}</h3>
-                        <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(node.status)}`}>
-                          {getStatusBadge(node.status)}
-                        </span>
-                      </div>
-                      {node.description && (
-                        <p className="text-sm text-gray-500 mt-1">{node.description}</p>
-                      )}
+                  <div className="timeline-node-card__header">
+                    <div>
+                      <h3 className="timeline-node-card__title">{node.name}</h3>
+                      {node.description ? <p className="timeline-node-card__description">{node.description}</p> : null}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={(event) => openEditModal(node, event)}
-                        className="text-blue-500 text-sm"
-                      >
+                    <StatusPill status={node.status} />
+                  </div>
+
+                  <div className="timeline-progress">
+                    <div className="timeline-progress__meta">
+                      <span>进度</span>
+                      <span>{node.progress}%</span>
+                    </div>
+                    <div className="timeline-progress__track">
+                      <div className="timeline-progress__value" style={{ width: `${node.progress}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="timeline-node-card__footer">
+                    <div className="timeline-node-card__deadline">
+                      {node.deadline ? `截止：${node.deadline}` : '未设置截止日期'}
+                    </div>
+                    <div className="timeline-node-card__actions">
+                      <button type="button" className="brand-inline-button" onClick={(event) => openEditModal(node, event)}>
                         编辑
                       </button>
                       <button
+                        type="button"
+                        className="brand-inline-button brand-inline-button--danger"
                         onClick={(event) => handleDeleteNode(node.id, event)}
-                        className="text-red-500 text-sm"
                       >
                         删除
                       </button>
                     </div>
                   </div>
 
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>进度</span>
-                      <span>{node.progress}%</span>
-                    </div>
-                    <div className="h-2 bg-gray-200 rounded-full">
-                      <div
-                        className="h-full bg-wedding-red rounded-full transition-all"
-                        style={{ width: `${node.progress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex justify-between items-center">
-                    {node.deadline && (
-                      <p className="text-xs text-gray-400">截止: {node.deadline}</p>
-                    )}
-                    <div className="flex gap-1 ml-auto">
-                      {node.status === 'pending' && (
-                        <Button
-                          size="small"
-                          onClick={(event) => handleStatusChange(node, 'in_progress', event)}
-                        >
-                          开始
-                        </Button>
-                      )}
-                      {node.status === 'in_progress' && (
-                        <Button
-                          size="small"
-                          color="success"
-                          onClick={(event) => handleStatusChange(node, 'completed', event)}
-                        >
-                          完成
-                        </Button>
-                      )}
-                      {(node.status === 'pending' || node.status === 'in_progress') && (
-                        <Button
-                          size="small"
-                          onClick={(event) => handleStatusChange(node, 'cancelled', event)}
-                        >
-                          取消
-                        </Button>
-                      )}
-                    </div>
+                  <div className="timeline-node-card__status-actions">
+                    {node.status === 'pending' ? (
+                      <button type="button" className="brand-secondary-button" onClick={(event) => handleStatusChange(node, 'in_progress', event)}>
+                        开始
+                      </button>
+                    ) : null}
+                    {node.status === 'in_progress' ? (
+                      <button type="button" className="brand-primary-button" onClick={(event) => handleStatusChange(node, 'completed', event)}>
+                        完成
+                      </button>
+                    ) : null}
+                    {(node.status === 'pending' || node.status === 'in_progress') ? (
+                      <button type="button" className="brand-secondary-button" onClick={(event) => handleStatusChange(node, 'cancelled', event)}>
+                        取消
+                      </button>
+                    ) : null}
                   </div>
                 </div>
-              ))}
+              </SurfaceCard>
+            ))}
 
-              <button
-                onClick={openCreateModal}
-                className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-500 hover:border-wedding-red hover:text-wedding-red transition"
-              >
-                + 添加节点
-              </button>
-            </div>
-          )}
-        </div>
+            <button type="button" onClick={openCreateModal} className="brand-secondary-button">
+              添加节点
+            </button>
+          </div>
+        )}
       </div>
 
       <Dialog
@@ -319,7 +301,7 @@ export default function Timeline() {
               onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
               placeholder="描述（可选）"
               rows={3}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2"
+              className="themed-textarea"
             />
             <DateField
               label="截止日期"
@@ -361,7 +343,7 @@ export default function Timeline() {
               onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))}
               placeholder="描述（可选）"
               rows={3}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2"
+              className="themed-textarea"
             />
             <DateField
               label="截止日期"
@@ -387,24 +369,6 @@ export default function Timeline() {
         }}
         onClose={closeEditModal}
       />
-
-      <div
-        className="timeline-shell__nav bg-white border-t flex justify-around py-2"
-        data-testid="timeline-bottom-nav"
-      >
-        <button className="flex flex-col items-center text-wedding-red">
-          <span className="text-xl">📋</span>
-          <span className="text-xs">时间线</span>
-        </button>
-        <button onClick={() => navigate('/statistics')} className="flex flex-col items-center text-gray-400">
-          <span className="text-xl">📊</span>
-          <span className="text-xs">统计</span>
-        </button>
-        <button onClick={() => navigate('/settings')} className="flex flex-col items-center text-gray-400">
-          <span className="text-xl">⚙️</span>
-          <span className="text-xs">设置</span>
-        </button>
-      </div>
-    </div>
+    </AppShell>
   )
 }

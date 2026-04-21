@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Timeline from '../pages/Timeline/Timeline'
 import { timelineAPI } from '../services/api'
@@ -6,9 +8,18 @@ import { timelineAPI } from '../services/api'
 const mockNavigate = vi.fn()
 const mockEmitRealtimeEvent = vi.fn()
 
-vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
-}))
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return {
+    ...actual,
+    NavLink: ({ children, to, className }: { children: ReactNode; to: string; className?: string | ((props: { isActive: boolean }) => string) }) => (
+      <a href={to} className={typeof className === 'function' ? className({ isActive: to === '/' }) : className}>
+        {children}
+      </a>
+    ),
+    useNavigate: () => mockNavigate,
+  }
+})
 
 vi.mock('../hooks/useRealtimeRefresh', () => ({
   useRealtimeRefresh: () => undefined,
@@ -40,6 +51,14 @@ const getTimelineMock = vi.mocked(timelineAPI.getTimeline)
 const createNodeMock = vi.mocked(timelineAPI.createNode)
 const updateNodeMock = vi.mocked(timelineAPI.updateNode)
 
+function renderTimeline() {
+  render(
+    <MemoryRouter>
+      <Timeline />
+    </MemoryRouter>,
+  )
+}
+
 const initialNodes = [
   {
     id: 1,
@@ -65,11 +84,11 @@ describe('Timeline modal flows', () => {
   })
 
   it('creates a node from a modal and uses DateField instead of a raw date input', async () => {
-    render(<Timeline />)
+    renderTimeline()
 
     expect(await screen.findByText('订酒店')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '+ 添加节点' }))
+    fireEvent.click(screen.getByRole('button', { name: '创建节点' }))
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('创建节点')).toBeInTheDocument()
@@ -95,7 +114,7 @@ describe('Timeline modal flows', () => {
   })
 
   it('edits a node from a modal and keeps the existing date picker flow', async () => {
-    render(<Timeline />)
+    renderTimeline()
 
     expect(await screen.findByText('订酒店')).toBeInTheDocument()
 
@@ -123,14 +142,22 @@ describe('Timeline modal flows', () => {
     })
   })
 
-  it('renders a fixed shell with separate header, scroll region, and bottom nav', async () => {
-    render(<Timeline />)
+  it('renders the themed shell with brand header and bottom nav', async () => {
+    renderTimeline()
 
     await screen.findByText('订酒店')
 
-    expect(screen.getByTestId('timeline-shell')).toHaveClass('timeline-shell')
-    expect(screen.getByTestId('timeline-header')).toHaveClass('timeline-shell__header')
-    expect(screen.getByTestId('timeline-scroll-region')).toHaveClass('timeline-shell__scroll')
-    expect(screen.getByTestId('timeline-bottom-nav')).toHaveClass('timeline-shell__nav')
+    expect(screen.getByRole('heading', { name: '婚礼时间线' })).toBeInTheDocument()
+    expect(screen.getByText('Ceremony Planner')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: '主导航' })).toBeInTheDocument()
+  })
+
+  it('renders the redesigned themed timeline header instead of the legacy emoji title', async () => {
+    renderTimeline()
+
+    await screen.findByText('订酒店')
+
+    expect(screen.getByRole('heading', { name: '婚礼时间线' })).toBeInTheDocument()
+    expect(screen.queryByText('💒 婚嫁管家')).not.toBeInTheDocument()
   })
 })
