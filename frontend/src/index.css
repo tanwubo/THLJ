@@ -1026,6 +1026,12 @@ body,
   gap: 12px;
 }
 
+.timeline-node-dialog--form-only {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .timeline-node-dialog__status-group {
   display: grid;
   gap: 10px;

@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Dialog, Input, Popup, Toast } from 'antd-mobile'
+import { Dialog, Popup, Toast } from 'antd-mobile'
 import AppShell from '../../components/layout/AppShell'
 import ThemedCalendarPicker from '../../components/ThemedCalendarPicker'
 import BrandHeader from '../../components/layout/BrandHeader'
-import { DateField } from '../../components/DateField'
 import StatusPill, { statusLabelMap } from '../../components/ui/StatusPill'
 import SurfaceCard from '../../components/ui/SurfaceCard'
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { timelineAPI, TimelineNode } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
+import NodeEditorForm from './NodeEditorForm'
 
 type NodeFormState = {
   name: string
@@ -325,46 +325,15 @@ export default function Timeline() {
   const summaryTitle = partnerId ? `${user?.username ?? ''} · 双人筹备中` : `${user?.username ?? ''} · 单人筹备`
   const deadlinePickerNode = nodes.find((node) => node.id === deadlinePickerNodeId) ?? null
   const editDialogContent = (
-    <div className="timeline-node-dialog">
-      <div className="timeline-node-dialog__intro">
-        <p className="section-label">Complete Edit</p>
-        <p className="section-copy">在一个面板内调整节点名称、描述、状态与截止日期。</p>
-      </div>
-      <div className="timeline-node-dialog__fields">
-        <Input
-          placeholder="节点名称 *"
-          value={editForm.name}
-          onChange={(value) => setEditForm((current) => ({ ...current, name: value }))}
-        />
-        <textarea
-          value={editForm.description}
-          onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))}
-          placeholder="描述（可选）"
-          rows={3}
-          className="themed-textarea"
-        />
-        <DateField
-          label="截止日期"
-          value={editForm.deadline}
-          onChange={(value) => setEditForm((current) => ({ ...current, deadline: value }))}
-        />
-        <div className="timeline-node-dialog__status-group">
-          <span className="timeline-node-dialog__status-label">节点状态</span>
-          <div className="timeline-node-dialog__status-options">
-            {STATUS_OPTIONS.map((status) => (
-              <button
-                key={status}
-                type="button"
-                className={`timeline-node-dialog__status-option${editForm.status === status ? ' timeline-node-dialog__status-option--active' : ''}`}
-                onClick={() => setEditForm((current) => ({ ...current, status }))}
-              >
-                {statusLabelMap[status]}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+    <NodeEditorForm
+      mode="edit"
+      form={editForm}
+      onNameChange={(value) => setEditForm((current) => ({ ...current, name: value }))}
+      onDescriptionChange={(value) => setEditForm((current) => ({ ...current, description: value }))}
+      onDeadlineChange={(value) => setEditForm((current) => ({ ...current, deadline: value }))}
+      onStatusChange={(value) => setEditForm((current) => ({ ...current, status: value }))}
+      statusOptions={STATUS_OPTIONS}
+    />
   )
 
   if (loading) {
@@ -621,31 +590,15 @@ export default function Timeline() {
         visible={isCreateModalOpen}
         title="创建节点"
         content={
-          <div className="timeline-node-dialog">
-            <div className="timeline-node-dialog__intro">
-              <p className="section-label">New Node</p>
-              <p className="section-copy">先定义名称、说明与时间，让时间线结构保持清晰。</p>
-            </div>
-            <div className="timeline-node-dialog__fields">
-              <Input
-                placeholder="节点名称 *"
-                value={createForm.name}
-                onChange={(value) => setCreateForm((current) => ({ ...current, name: value }))}
-              />
-              <textarea
-                value={createForm.description}
-                onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
-                placeholder="描述（可选）"
-                rows={3}
-                className="themed-textarea"
-              />
-              <DateField
-                label="截止日期"
-                value={createForm.deadline}
-                onChange={(value) => setCreateForm((current) => ({ ...current, deadline: value }))}
-              />
-            </div>
-          </div>
+          <NodeEditorForm
+            mode="create"
+            form={createForm}
+            onNameChange={(value) => setCreateForm((current) => ({ ...current, name: value }))}
+            onDescriptionChange={(value) => setCreateForm((current) => ({ ...current, description: value }))}
+            onDeadlineChange={(value) => setCreateForm((current) => ({ ...current, deadline: value }))}
+            onStatusChange={(value) => setCreateForm((current) => ({ ...current, status: value }))}
+            statusOptions={STATUS_OPTIONS}
+          />
         }
         actions={[
           [
