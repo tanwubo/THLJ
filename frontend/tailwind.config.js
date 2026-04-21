@@ -6,15 +6,13 @@ export default {
   ],
   theme: {
     extend: {
-      colors: {
-        primary: '#FF6B6B',
-        secondary: '#4ECDC4',
-        wedding: {
-          red: '#E63946',
-          pink: '#FFB6C1',
-          gold: '#FFD700',
-        }
-      }
+      fontFamily: {
+        sans: ['Noto Sans SC', 'sans-serif'],
+        serif: ['Playfair Display', 'serif'],
+      },
+      boxShadow: {
+        card: 'var(--shadow-card)',
+      },
     },
   },
   plugins: [],
