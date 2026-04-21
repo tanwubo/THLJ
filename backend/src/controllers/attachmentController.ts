@@ -85,7 +85,8 @@ export const uploadAttachment = async (req: AuthRequest, res: Response) => {
 
     await ensureUploadDir();
 
-    const fileName = `${Date.now()}-${file.originalname}`;
+    const safeOriginalName = path.basename(file.originalname);
+    const fileName = `${Date.now()}-${safeOriginalName}`;
     const targetPath = path.join(UPLOAD_DIR, fileName);
 
     // 将临时文件移动到目标位置

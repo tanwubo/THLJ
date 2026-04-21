@@ -1,5 +1,6 @@
 import initSqlJs from 'sql.js'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import fs from 'fs/promises'
 import { applyWorkbenchSchema } from '../db/init'
 import { createExpense } from '../controllers/expenseController'
 import { uploadAttachment } from '../controllers/attachmentController'
@@ -198,6 +199,27 @@ describe('Workbench validation', () => {
     expect(runMock).not.toHaveBeenCalled()
   })
 
+  it('rejects malformed attachment todoId', async () => {
+    const { json, status, res } = createResponse()
+    const req = {
+      body: { todoId: 'abc' },
+      file: {
+        path: 'C:\\temp\\upload.tmp',
+        originalname: 'quote.pdf',
+        size: 1024,
+        mimetype: 'application/pdf',
+      },
+      user: { id: 99 },
+    } as any
+
+    await uploadAttachment(req, res)
+
+    expect(status).toHaveBeenCalledWith(400)
+    expect(json).toHaveBeenCalledWith({ error: 'todoId 必须是有效的正整数' })
+    expect(queryMock).not.toHaveBeenCalled()
+    expect(runMock).not.toHaveBeenCalled()
+  })
+
   it('rejects attachment upload for nonexistent or unowned todo', async () => {
     queryMock.mockReturnValue([])
 
@@ -257,5 +279,36 @@ describe('Workbench validation', () => {
       [1, 7, 99, 'quote.pdf', expect.stringMatching(/^\/uploads\/\d+-quote\.pdf$/), 1024, 'application/pdf']
     )
     expect(json).toHaveBeenCalledWith({ id: 201, todo_id: 7 })
+  })
+
+  it('sanitizes attachment filename before building the target path', async () => {
+    queryMock.mockImplementation((sql: string, params: any[] = []) => {
+      if (sql === 'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?') {
+        expect(params).toEqual([7, 99])
+        return [{ id: 7, node_id: 1 }]
+      }
+      if (sql === 'SELECT * FROM attachments WHERE id = ?') {
+        return [{ id: 201, todo_id: 7 }]
+      }
+      return []
+    })
+    runMock.mockResolvedValue({ lastInsertRowid: 201, changes: 1 })
+
+    const { res } = createResponse()
+    const file = {
+      path: 'C:\\temp\\upload.tmp',
+      originalname: '..\\unsafe/quote.pdf',
+      size: 1024,
+      mimetype: 'application/pdf',
+    }
+    const req = {
+      body: { todoId: 7 },
+      file,
+      user: { id: 99 },
+    } as any
+
+    await uploadAttachment(req, res)
+
+    expect((fs.rename as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(expect.stringMatching(/uploads[\\/]\d+-quote\.pdf$/))
   })
 })
