@@ -99,20 +99,9 @@ describe('Workbench validation', () => {
   })
 
   it('rejects expense creation without todoId', async () => {
-    queryMock.mockImplementation((sql: string) => {
-      if (sql === 'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?') {
-        return [{ id: 1 }]
-      }
-      if (sql === 'SELECT * FROM expense_records WHERE id = ?') {
-        return [{ id: 101 }]
-      }
-      return []
-    })
-    runMock.mockResolvedValue({ lastInsertRowid: 101, changes: 1 })
-
     const { json, status, res } = createResponse()
     const req = {
-      body: { nodeId: 1, type: 'expense', amount: 100, category: '婚宴' },
+      body: { type: 'expense', amount: 100, category: '婚宴' },
       user: { id: 99 },
     } as any
 
@@ -120,23 +109,78 @@ describe('Workbench validation', () => {
 
     expect(status).toHaveBeenCalledWith(400)
     expect(json).toHaveBeenCalledWith({ error: 'todoId 为必填项' })
+    expect(queryMock).not.toHaveBeenCalled()
+    expect(runMock).not.toHaveBeenCalled()
   })
 
-  it('rejects attachment upload without todoId', async () => {
-    queryMock.mockImplementation((sql: string) => {
-      if (sql === 'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?') {
-        return [{ id: 1 }]
-      }
-      if (sql === 'SELECT * FROM attachments WHERE id = ?') {
-        return [{ id: 201 }]
-      }
-      return []
-    })
-    runMock.mockResolvedValue({ lastInsertRowid: 201, changes: 1 })
+  it('rejects malformed expense todoId', async () => {
+    const { json, status, res } = createResponse()
+    const req = {
+      body: { todoId: 'abc', type: 'expense', amount: 100, category: '婚宴' },
+      user: { id: 99 },
+    } as any
+
+    await createExpense(req, res)
+
+    expect(status).toHaveBeenCalledWith(400)
+    expect(json).toHaveBeenCalledWith({ error: 'todoId 必须是有效的正整数' })
+    expect(queryMock).not.toHaveBeenCalled()
+    expect(runMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects expense creation for nonexistent or unowned todo', async () => {
+    queryMock.mockReturnValue([])
 
     const { json, status, res } = createResponse()
     const req = {
-      body: { nodeId: 1 },
+      body: { todoId: 7, type: 'expense', amount: 100, category: '婚宴' },
+      user: { id: 99 },
+    } as any
+
+    await createExpense(req, res)
+
+    expect(queryMock).toHaveBeenCalledWith(
+      'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?',
+      [7, 99]
+    )
+    expect(status).toHaveBeenCalledWith(404)
+    expect(json).toHaveBeenCalledWith({ error: '待办不存在' })
+    expect(runMock).not.toHaveBeenCalled()
+  })
+
+  it('stores todo_id when creating an expense', async () => {
+    queryMock.mockImplementation((sql: string, params: any[] = []) => {
+      if (sql === 'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?') {
+        expect(params).toEqual([7, 99])
+        return [{ id: 7, node_id: 1 }]
+      }
+      if (sql === 'SELECT * FROM expense_records WHERE id = ?') {
+        expect(params).toEqual([101])
+        return [{ id: 101, todo_id: 7 }]
+      }
+      return []
+    })
+    runMock.mockResolvedValue({ lastInsertRowid: 101, changes: 1 })
+
+    const { json, res } = createResponse()
+    const req = {
+      body: { todoId: 7, type: 'expense', amount: 100, category: '婚宴', description: '订金' },
+      user: { id: 99 },
+    } as any
+
+    await createExpense(req, res)
+
+    expect(runMock).toHaveBeenCalledWith(
+      'INSERT INTO expense_records (node_id, todo_id, user_id, type, amount, category, description) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [1, 7, 99, 'expense', 100, '婚宴', '订金']
+    )
+    expect(json).toHaveBeenCalledWith({ id: 101, todo_id: 7 })
+  })
+
+  it('rejects attachment upload without todoId', async () => {
+    const { json, status, res } = createResponse()
+    const req = {
+      body: {},
       file: {
         path: 'C:\\temp\\upload.tmp',
         originalname: 'quote.pdf',
@@ -150,5 +194,68 @@ describe('Workbench validation', () => {
 
     expect(status).toHaveBeenCalledWith(400)
     expect(json).toHaveBeenCalledWith({ error: 'todoId 为必填项' })
+    expect(queryMock).not.toHaveBeenCalled()
+    expect(runMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects attachment upload for nonexistent or unowned todo', async () => {
+    queryMock.mockReturnValue([])
+
+    const { json, status, res } = createResponse()
+    const req = {
+      body: { todoId: 7 },
+      file: {
+        path: 'C:\\temp\\upload.tmp',
+        originalname: 'quote.pdf',
+        size: 1024,
+        mimetype: 'application/pdf',
+      },
+      user: { id: 99 },
+    } as any
+
+    await uploadAttachment(req, res)
+
+    expect(queryMock).toHaveBeenCalledWith(
+      'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?',
+      [7, 99]
+    )
+    expect(status).toHaveBeenCalledWith(404)
+    expect(json).toHaveBeenCalledWith({ error: '待办不存在' })
+    expect(runMock).not.toHaveBeenCalled()
+  })
+
+  it('stores todo_id when uploading an attachment', async () => {
+    queryMock.mockImplementation((sql: string, params: any[] = []) => {
+      if (sql === 'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?') {
+        expect(params).toEqual([7, 99])
+        return [{ id: 7, node_id: 1 }]
+      }
+      if (sql === 'SELECT * FROM attachments WHERE id = ?') {
+        expect(params).toEqual([201])
+        return [{ id: 201, todo_id: 7 }]
+      }
+      return []
+    })
+    runMock.mockResolvedValue({ lastInsertRowid: 201, changes: 1 })
+
+    const { json, res } = createResponse()
+    const req = {
+      body: { todoId: 7 },
+      file: {
+        path: 'C:\\temp\\upload.tmp',
+        originalname: 'quote.pdf',
+        size: 1024,
+        mimetype: 'application/pdf',
+      },
+      user: { id: 99 },
+    } as any
+
+    await uploadAttachment(req, res)
+
+    expect(runMock).toHaveBeenCalledWith(
+      'INSERT INTO attachments (node_id, todo_id, user_id, file_name, file_path, file_size, file_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [1, 7, 99, 'quote.pdf', expect.stringMatching(/^\/uploads\/\d+-quote\.pdf$/), 1024, 'application/pdf']
+    )
+    expect(json).toHaveBeenCalledWith({ id: 201, todo_id: 7 })
   })
 })

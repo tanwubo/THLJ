@@ -6,6 +6,19 @@ import fs from 'fs/promises';
 
 const UPLOAD_DIR = path.join(__dirname, '../../../public/uploads');
 
+function parseTodoId(input: unknown): { todoId?: number; error?: string } {
+  if (input === undefined || input === null || input === '') {
+    return { error: 'todoId 为必填项' };
+  }
+
+  const todoId = Number(input);
+  if (!Number.isInteger(todoId) || todoId <= 0) {
+    return { error: 'todoId 必须是有效的正整数' };
+  }
+
+  return { todoId };
+}
+
 // 确保上传目录存在
 async function ensureUploadDir() {
   try {
@@ -46,11 +59,11 @@ export const uploadAttachment = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const body = req.body ?? {};
     const querySource = req.query ?? {};
-    const todoId = Number(body.todoId ?? querySource.todoId);
+    const todoCheck = parseTodoId(body.todoId ?? querySource.todoId);
     const file = (req as any).file;
 
-    if (!todoId) {
-      return res.status(400).json({ error: 'todoId 为必填项' });
+    if (todoCheck.error) {
+      return res.status(400).json({ error: todoCheck.error });
     }
 
     if (!file) {
@@ -59,7 +72,7 @@ export const uploadAttachment = async (req: AuthRequest, res: Response) => {
 
     const todo = query(
       'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?',
-      [todoId, userId]
+      [todoCheck.todoId, userId]
     );
     if (todo.length === 0) {
       return res.status(404).json({ error: '待办不存在' });
@@ -80,8 +93,8 @@ export const uploadAttachment = async (req: AuthRequest, res: Response) => {
 
     const filePath = `/uploads/${fileName}`;
     const result = await run(
-      'INSERT INTO attachments (node_id, user_id, file_name, file_path, file_size, file_type) VALUES (?, ?, ?, ?, ?, ?)',
-      [todo[0].node_id, userId, file.originalname, filePath, file.size, file.mimetype]
+      'INSERT INTO attachments (node_id, todo_id, user_id, file_name, file_path, file_size, file_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [todo[0].node_id, todo[0].id, userId, file.originalname, filePath, file.size, file.mimetype]
     );
 
     const attachment = query('SELECT * FROM attachments WHERE id = ?', [result.lastInsertRowid]);

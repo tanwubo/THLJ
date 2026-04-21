@@ -8,6 +8,19 @@ export const EXPENSE_CATEGORIES = {
   expense: ['婚宴', '婚庆', '婚车', '婚纱摄影', '三金/五金', '酒店预订', '婚车车队', '蜜月旅行', '其他支出']
 };
 
+function parseTodoId(input: unknown): { todoId?: number; error?: string } {
+  if (input === undefined || input === null || input === '') {
+    return { error: 'todoId 为必填项' };
+  }
+
+  const todoId = Number(input);
+  if (!Number.isInteger(todoId) || todoId <= 0) {
+    return { error: 'todoId 必须是有效的正整数' };
+  }
+
+  return { todoId };
+}
+
 export const getExpenses = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -51,11 +64,11 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const body = req.body ?? {};
     const querySource = req.query ?? {};
-    const todoId = Number(body.todoId ?? querySource.todoId);
+    const todoCheck = parseTodoId(body.todoId ?? querySource.todoId);
     const { type, amount, category, description } = body;
 
-    if (!todoId) {
-      return res.status(400).json({ error: 'todoId 为必填项' });
+    if (todoCheck.error) {
+      return res.status(400).json({ error: todoCheck.error });
     }
 
     if (!type || !amount || !category) {
@@ -64,15 +77,15 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
 
     const todo = query(
       'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?',
-      [todoId, userId]
+      [todoCheck.todoId, userId]
     );
     if (todo.length === 0) {
       return res.status(404).json({ error: '待办不存在' });
     }
 
     const result = await run(
-      'INSERT INTO expense_records (node_id, user_id, type, amount, category, description) VALUES (?, ?, ?, ?, ?, ?)',
-      [todo[0].node_id, userId, type, amount, category, description || null]
+      'INSERT INTO expense_records (node_id, todo_id, user_id, type, amount, category, description) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [todo[0].node_id, todo[0].id, userId, type, amount, category, description || null]
     );
 
     const expense = query('SELECT * FROM expense_records WHERE id = ?', [result.lastInsertRowid]);
