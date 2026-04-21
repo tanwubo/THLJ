@@ -1,6 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --bg-base: #f7f1eb;
+  --bg-muted: #efe5d9;
+  --bg-elevated: rgba(255, 251, 246, 0.92);
+  --bg-hero: linear-gradient(180deg, #7a1328 0%, #56101f 100%);
+  --text-primary: #25161a;
+  --text-secondary: #70545a;
+  --text-muted: #9a8086;
+  --text-on-brand: #fff8f1;
+  --brand-primary: #7f1730;
+  --brand-primary-soft: #f3d9dc;
+  --brand-accent: #c8a062;
+  --border-soft: rgba(122, 85, 63, 0.16);
+  --shadow-card: 0 18px 40px rgba(103, 47, 56, 0.12);
+}
+
+:root[data-theme='champagne-light'] {
+  --bg-base: #f5efe6;
+  --bg-muted: #eee4d7;
+  --bg-elevated: rgba(255, 253, 249, 0.94);
+  --bg-hero: linear-gradient(180deg, #efe0d1 0%, #dfc6af 100%);
+  --text-primary: #31231c;
+  --text-secondary: #6f5a4a;
+  --text-muted: #98816d;
+  --text-on-brand: #2d2119;
+  --brand-primary: #b88752;
+  --brand-primary-soft: #f1e4d3;
+  --brand-accent: #d2a67a;
+  --border-soft: rgba(130, 95, 61, 0.14);
+  --shadow-card: 0 18px 40px rgba(118, 91, 67, 0.12);
+}
 
 * {
   margin: 0;
@@ -9,12 +43,11 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f9fafb;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
 }
 
 #root {
