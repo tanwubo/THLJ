@@ -153,30 +153,83 @@ describe('Node Status Types', () => {
 })
 
 describe('Workbench aggregation', () => {
-  it('returns a node workbench payload grouped by todo', async () => {
-    const queryMock = query as unknown as ReturnType<typeof vi.fn>
-    queryMock.mockImplementation((sql: string) => {
-      if (sql.includes('FROM timeline_nodes')) {
-        return [{ id: 1, name: '确定结婚意向', status: 'pending' }]
+  const queryMock = query as unknown as ReturnType<typeof vi.fn>
+
+  function createResponse() {
+    const json = vi.fn()
+    const status = vi.fn().mockReturnValue({ json })
+    return { json, status, res: { json, status } as any }
+  }
+
+  function resetQueryMock() {
+    queryMock.mockReset()
+  }
+
+  function mockWorkbenchQueries({
+    nodeRows,
+    todoRows,
+    expenseRows = [],
+    attachmentRows = [],
+    memoRows = [],
+  }: {
+    nodeRows: any[]
+    todoRows: any[]
+    expenseRows?: any[]
+    attachmentRows?: any[]
+    memoRows?: any[]
+  }) {
+    queryMock.mockImplementation((sql: string, params: any[] = []) => {
+      if (sql === 'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?') {
+        return nodeRows
       }
-      if (sql.includes('FROM todo_items')) {
-        return [{ id: 11, node_id: 1, content: '沟通彩礼金额' }]
+      if (sql === 'SELECT * FROM todo_items WHERE node_id = ? ORDER BY created_at DESC') {
+        return todoRows
       }
-      if (sql.includes('FROM expense_records')) {
-        return [{ id: 21, todo_id: 11, amount: 5200 }]
+      if (sql.startsWith('SELECT * FROM expense_records WHERE todo_id IN (')) {
+        expect(params).toEqual(todoRows.map(todo => todo.id))
+        return expenseRows
       }
-      if (sql.includes('FROM attachments')) {
-        return [{ id: 31, todo_id: 11, file_name: '报价单.pdf' }]
+      if (sql.startsWith('SELECT * FROM attachments WHERE todo_id IN (')) {
+        expect(params).toEqual(todoRows.map(todo => todo.id))
+        return attachmentRows
       }
-      if (sql.includes('FROM memos')) {
-        return [{ id: 41, node_id: 1, content: 'memo' }]
+      if (sql === 'SELECT * FROM memos WHERE node_id = ? ORDER BY updated_at DESC LIMIT 1') {
+        return memoRows
       }
       return []
     })
+  }
 
-    const json = vi.fn()
-    const status = vi.fn().mockReturnValue({ json })
-    const res = { status, json } as any
+  it('returns 404 when the node is missing and keeps the lookup scoped by user_id', async () => {
+    resetQueryMock()
+    mockWorkbenchQueries({
+      nodeRows: [],
+      todoRows: [],
+    })
+
+    const { json, status, res } = createResponse()
+    const req = { params: { id: '1' }, user: { id: 99 } } as any
+
+    await getNodeWorkbench(req, res)
+
+    expect(queryMock).toHaveBeenCalledTimes(1)
+    expect(queryMock).toHaveBeenCalledWith(
+      'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?',
+      ['1', 99]
+    )
+    expect(status).toHaveBeenCalledWith(404)
+    expect(json).toHaveBeenCalledWith({ error: '节点不存在' })
+  })
+
+  it('returns an empty workbench when the node has no todos or memo', async () => {
+    resetQueryMock()
+    mockWorkbenchQueries({
+      nodeRows: [{ id: 1, name: '确定结婚意向', status: 'pending' }],
+      todoRows: [],
+      memoRows: [],
+    })
+
+    const { json, res } = createResponse()
     const req = { params: { id: '1' }, user: { id: 99 } } as any
 
     await getNodeWorkbench(req, res)
@@ -184,10 +237,59 @@ describe('Workbench aggregation', () => {
     const payload = json.mock.calls[0][0]
 
     expect(payload.node).toEqual({ id: 1, name: '确定结婚意向', status: 'pending' })
-    expect(payload.todos).toHaveLength(1)
+    expect(payload.todos).toEqual([])
+    expect(payload.memo).toBeNull()
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes('expense_records'))).toBe(false)
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes('attachments'))).toBe(false)
+  })
+
+  it('returns grouped todos and uses the todo_id IN (...) path for child records', async () => {
+    resetQueryMock()
+    mockWorkbenchQueries({
+      nodeRows: [{ id: 1, name: '确定结婚意向', status: 'pending' }],
+      todoRows: [
+        { id: 11, node_id: 1, content: '沟通彩礼金额' },
+        { id: 12, node_id: 1, content: '确认婚期' },
+      ],
+      expenseRows: [
+        { id: 21, todo_id: 11, amount: 5200 },
+        { id: 22, todo_id: 12, amount: 3000 },
+      ],
+      attachmentRows: [
+        { id: 31, todo_id: 11, file_name: '报价单.pdf' },
+        { id: 32, todo_id: 12, file_name: '日期表.xlsx' },
+      ],
+      memoRows: [{ id: 41, node_id: 1, content: 'memo' }],
+    })
+
+    const { json, res } = createResponse()
+    const req = { params: { id: '1' }, user: { id: 99 } } as any
+
+    await getNodeWorkbench(req, res)
+
+    const payload = json.mock.calls[0][0]
+    const expenseQuery = queryMock.mock.calls.find(([sql]) => String(sql).startsWith('SELECT * FROM expense_records WHERE todo_id IN ('))
+    const attachmentQuery = queryMock.mock.calls.find(([sql]) => String(sql).startsWith('SELECT * FROM attachments WHERE todo_id IN ('))
+
+    expect(queryMock).toHaveBeenNthCalledWith(
+      1,
+      'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?',
+      ['1', 99]
+    )
+    expect(queryMock).toHaveBeenNthCalledWith(
+      2,
+      'SELECT * FROM todo_items WHERE node_id = ? ORDER BY created_at DESC',
+      ['1']
+    )
+    expect(expenseQuery?.[1]).toEqual([11, 12])
+    expect(attachmentQuery?.[1]).toEqual([11, 12])
+    expect(payload.todos).toHaveLength(2)
     expect(payload.todos[0].id).toBe(11)
-    expect(payload.todos[0].expenses[0].todo_id).toBe(payload.todos[0].id)
-    expect(payload.todos[0].attachments[0].todo_id).toBe(payload.todos[0].id)
+    expect(payload.todos[0].expenses).toEqual([{ id: 21, todo_id: 11, amount: 5200 }])
+    expect(payload.todos[0].attachments).toEqual([{ id: 31, todo_id: 11, file_name: '报价单.pdf' }])
+    expect(payload.todos[1].id).toBe(12)
+    expect(payload.todos[1].expenses).toEqual([{ id: 22, todo_id: 12, amount: 3000 }])
+    expect(payload.todos[1].attachments).toEqual([{ id: 32, todo_id: 12, file_name: '日期表.xlsx' }])
     expect(payload.memo).toEqual({ id: 41, node_id: 1, content: 'memo' })
   })
 })

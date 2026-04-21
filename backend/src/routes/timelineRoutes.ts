@@ -11,6 +11,6 @@ router.post('/', createNode);
 router.put('/:id', updateNode);
 router.delete('/:id', deleteNode);
 router.post('/update-order', updateNodeOrder);
-router.get('/:id/workbench', authMiddleware, getNodeWorkbench);
+router.get('/:id/workbench', getNodeWorkbench);
 
 export default router;
