@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Input, Toast, Tabs } from 'antd-mobile'
+import SurfaceCard from '../../components/ui/SurfaceCard'
 import { useAuthStore } from '../../store/authStore'
 
 const Login = () => {
@@ -11,7 +12,6 @@ const Login = () => {
   const navigate = useNavigate()
   const { login, register, loading, token } = useAuthStore()
 
-  // 如果已经登录，直接跳转到首页
   if (token) {
     navigate('/')
     return null
@@ -25,8 +25,8 @@ const Login = () => {
     try {
       await login(username, password)
       navigate('/')
-    } catch (error) {
-      // 错误已经在store中处理了
+    } catch (_error) {
+      // 错误已经在 store 中处理
     }
   }
 
@@ -46,90 +46,66 @@ const Login = () => {
     try {
       await register(username, password, email || undefined)
       navigate('/')
-    } catch (error) {
-      // 错误已经在store中处理了
+    } catch (_error) {
+      // 错误已经在 store 中处理
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 flex flex-col justify-center px-6">
-      <div className="text-center mb-10">
-        <h1 className="text-4xl font-bold text-wedding-red mb-2">💒 婚嫁管家</h1>
-        <p className="text-gray-600">记录我们的幸福每一步</p>
+    <div className="auth-page">
+      <div className="auth-page__hero">
+        <p className="auth-page__eyebrow">Wedding Manager</p>
+        <h1 className="auth-page__title">婚嫁管家</h1>
+        <p className="auth-page__subtitle">
+          用高定计划册的方式，记录从决定、筹备到落地的每一程。
+        </p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          className="mb-6"
-        >
+      <SurfaceCard className="auth-page__card">
+        <div className="auth-page__card-header">
+          <p className="auth-page__card-label">Planner Access</p>
+          <h2 className="auth-page__card-title">进入你的筹备空间</h2>
+        </div>
+
+        <Tabs activeKey={activeTab} onChange={setActiveTab} className="auth-page__tabs">
           <Tabs.Tab title="登录" key="login" />
           <Tabs.Tab title="注册" key="register" />
         </Tabs>
 
         {activeTab === 'login' ? (
-          <div className="space-y-4">
-            <Input
-              placeholder="用户名"
-              value={username}
-              onChange={setUsername}
-              className="border border-gray-200 rounded-lg p-3"
-            />
-            <Input
-              type="password"
-              placeholder="密码"
-              value={password}
-              onChange={setPassword}
-              className="border border-gray-200 rounded-lg p-3"
-            />
-            <Button
-              block
-              color="danger"
-              size="large"
-              onClick={handleLogin}
-              loading={loading}
-              disabled={loading}
-              className="bg-wedding-red rounded-lg h-12 text-white font-medium"
-            >
+          <div className="auth-form">
+            <label className="auth-form__field">
+              <span>用户名</span>
+              <Input placeholder="输入用户名" value={username} onChange={setUsername} />
+            </label>
+            <label className="auth-form__field">
+              <span>密码</span>
+              <Input type="password" placeholder="输入密码" value={password} onChange={setPassword} />
+            </label>
+            <Button block color="danger" size="large" onClick={handleLogin} loading={loading} disabled={loading}>
               登录
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
-            <Input
-              placeholder="用户名"
-              value={username}
-              onChange={setUsername}
-              className="border border-gray-200 rounded-lg p-3"
-            />
-            <Input
-              type="password"
-              placeholder="密码"
-              value={password}
-              onChange={setPassword}
-              className="border border-gray-200 rounded-lg p-3"
-            />
-            <Input
-              placeholder="邮箱（可选）"
-              value={email}
-              onChange={setEmail}
-              className="border border-gray-200 rounded-lg p-3"
-            />
-            <Button
-              block
-              color="danger"
-              size="large"
-              onClick={handleRegister}
-              loading={loading}
-              disabled={loading}
-              className="bg-wedding-red rounded-lg h-12 text-white font-medium"
-            >
+          <div className="auth-form">
+            <label className="auth-form__field">
+              <span>用户名</span>
+              <Input placeholder="输入用户名" value={username} onChange={setUsername} />
+            </label>
+            <label className="auth-form__field">
+              <span>密码</span>
+              <Input type="password" placeholder="设置密码" value={password} onChange={setPassword} />
+            </label>
+            <label className="auth-form__field">
+              <span>邮箱（可选）</span>
+              <Input placeholder="输入邮箱" value={email} onChange={setEmail} />
+            </label>
+            <Button block color="danger" size="large" onClick={handleRegister} loading={loading} disabled={loading}>
               注册
             </Button>
           </div>
         )}
-      </div>
+      </SurfaceCard>
     </div>
   )
 }

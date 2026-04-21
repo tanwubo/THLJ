@@ -39,7 +39,7 @@ export const useAuthStore = create<AuthState>()(
         const state = useAuthStore.getState()
         if (!state.user?.partnerId || state.socket || !state.token) return
 
-        const socketUrl = process.env.NODE_ENV === 'production'
+        const socketUrl = import.meta.env.PROD
           ? window.location.origin
           : 'http://localhost:3001'
 

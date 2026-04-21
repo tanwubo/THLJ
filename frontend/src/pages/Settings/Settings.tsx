@@ -1,12 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../../store/authStore'
+import { Dialog, Input, Toast } from 'antd-mobile'
+import AppShell from '../../components/layout/AppShell'
+import BrandHeader from '../../components/layout/BrandHeader'
+import ThemePreviewCard from '../../components/ui/ThemePreviewCard'
+import SurfaceCard from '../../components/ui/SurfaceCard'
 import { authAPI } from '../../services/api'
-import { Button, Toast, Dialog, Input } from 'antd-mobile'
+import { useAuthStore } from '../../store/authStore'
+import { themes } from '../../theme/themes'
+import { useTheme } from '../../theme/useTheme'
 
 export default function Settings() {
   const navigate = useNavigate()
   const { user, logout, loadProfile } = useAuthStore()
+  const { theme, setTheme } = useTheme()
   const [showBind, setShowBind] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(false)
@@ -55,9 +62,9 @@ export default function Settings() {
     })
   }
 
-  const copyInviteCode = () => {
+  const copyInviteCode = async () => {
     if (user?.inviteCode) {
-      navigator.clipboard.writeText(user.inviteCode)
+      await navigator.clipboard.writeText(user.inviteCode)
       Toast.show('邀请码已复制')
     }
   }
@@ -68,123 +75,124 @@ export default function Settings() {
       const res = await authAPI.getBackup()
       const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `wedding-backup-${new Date().toISOString().split('T')[0]}.json`
-      a.click()
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `wedding-backup-${new Date().toISOString().split('T')[0]}.json`
+      link.click()
       URL.revokeObjectURL(url)
       Toast.show('备份已下载')
-    } catch (error) {
+    } catch (_error) {
       Toast.show('备份失败')
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-16">
-      {/* 头部 */}
-      <div className="bg-wedding-red text-white p-4">
-        <h1 className="text-xl font-bold">⚙️ 设置</h1>
-        <p className="text-sm mt-1">{user?.username}</p>
-      </div>
-
-      <div className="p-4 space-y-4">
-        {/* 账号信息 */}
-        <div className="bg-white rounded-lg p-4">
-          <h2 className="font-medium mb-3">账号信息</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">用户名</span>
-              <span>{user?.username}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">邀请码</span>
-              <div className="flex items-center gap-2">
-                <span className="font-mono">{user?.inviteCode}</span>
-                <button onClick={copyInviteCode} className="text-blue-500 text-xs">复制</button>
-              </div>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">绑定状态</span>
-              <span>{user?.partnerId ? '💑 已绑定' : '❌ 未绑定'}</span>
-            </div>
+    <AppShell
+      withBottomNav
+      header={<BrandHeader eyebrow="Preferences" title="设置" subtitle={user?.username || 'Wedding Manager'} />}
+    >
+      <div className="settings-page">
+        <SurfaceCard className="settings-section">
+          <p className="section-label">Theme</p>
+          <h2 className="section-title">外观主题</h2>
+          <div className="theme-preview-grid">
+            <ThemePreviewCard
+              themeKey="ceremony-red"
+              title={themes['ceremony-red'].label}
+              description={themes['ceremony-red'].description}
+              swatches={[
+                themes['ceremony-red'].preview.hero,
+                themes['ceremony-red'].preview.surface,
+                themes['ceremony-red'].preview.accent,
+              ]}
+              selected={theme === 'ceremony-red'}
+              onSelect={setTheme}
+            />
+            <ThemePreviewCard
+              themeKey="champagne-light"
+              title={themes['champagne-light'].label}
+              description={themes['champagne-light'].description}
+              swatches={[
+                themes['champagne-light'].preview.hero,
+                themes['champagne-light'].preview.surface,
+                themes['champagne-light'].preview.accent,
+              ]}
+              selected={theme === 'champagne-light'}
+              onSelect={setTheme}
+            />
           </div>
-        </div>
+        </SurfaceCard>
 
-        {/* 情侣绑定 */}
-        <div className="bg-white rounded-lg p-4">
-          <h2 className="font-medium mb-3">情侣绑定</h2>
+        <SurfaceCard className="settings-section">
+          <p className="section-label">Account</p>
+          <h2 className="section-title">账号信息</h2>
+          <div className="settings-meta">
+            <div><span>用户名</span><strong>{user?.username}</strong></div>
+            <div>
+              <span>邀请码</span>
+              <strong>{user?.inviteCode}</strong>
+              <button type="button" className="brand-inline-button" onClick={copyInviteCode}>复制</button>
+            </div>
+            <div><span>绑定状态</span><strong>{user?.partnerId ? '已绑定' : '未绑定'}</strong></div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard className="settings-section">
+          <p className="section-label">Partner</p>
+          <h2 className="section-title">情侣绑定</h2>
           {user?.partnerId ? (
-            <div className="space-y-3">
-              <div className="text-sm text-gray-600">
-                已绑定用户: {user.partner?.username}
-              </div>
-              <Button color="danger" size="small" onClick={handleUnbindPartner}>
+            <div className="settings-stack">
+              <p className="section-copy">已绑定用户：{user.partner?.username}</p>
+              <button type="button" className="brand-secondary-button" onClick={handleUnbindPartner}>
                 解除绑定
-              </Button>
+              </button>
             </div>
           ) : (
-            <div>
-              <p className="text-sm text-gray-500 mb-3">
-                将您的邀请码发送给另一半，或输入对方的邀请码进行绑定
-              </p>
+            <div className="settings-stack">
+              <p className="section-copy">将您的邀请码发送给另一半，或输入对方的邀请码进行绑定。</p>
               {showBind ? (
-                <div className="space-y-2">
-                  <Input
-                    placeholder="输入对方邀请码"
-                    value={inviteCode}
-                    onChange={setInviteCode}
-                  />
-                  <div className="flex gap-2">
-                    <Button size="small" onClick={() => setShowBind(false)}>取消</Button>
-                    <Button color="danger" size="small" onClick={handleBindPartner} loading={loading}>确认绑定</Button>
+                <>
+                  <label className="auth-form__field">
+                    <span>对方邀请码</span>
+                    <Input placeholder="输入邀请码" value={inviteCode} onChange={setInviteCode} />
+                  </label>
+                  <div className="timeline-form-actions">
+                    <button type="button" className="brand-secondary-button" onClick={() => setShowBind(false)}>
+                      取消
+                    </button>
+                    <button type="button" className="brand-primary-button" onClick={handleBindPartner} disabled={loading}>
+                      {loading ? '绑定中...' : '确认绑定'}
+                    </button>
                   </div>
-                </div>
+                </>
               ) : (
-                <Button color="danger" onClick={() => setShowBind(true)}>
+                <button type="button" className="brand-primary-button" onClick={() => setShowBind(true)}>
                   绑定情侣账号
-                </Button>
+                </button>
               )}
             </div>
           )}
-        </div>
+        </SurfaceCard>
 
-        {/* 数据管理 */}
-        <div className="bg-white rounded-lg p-4">
-          <h2 className="font-medium mb-3">数据管理</h2>
-          <div className="space-y-2">
-            <Button size="small" onClick={handleBackup}>
-              📥 备份数据
-            </Button>
-            <p className="text-xs text-gray-400">
-              导出所有数据为 JSON 文件，方便迁移或备份
-            </p>
+        <SurfaceCard className="settings-section">
+          <p className="section-label">Data</p>
+          <h2 className="section-title">数据管理</h2>
+          <div className="settings-stack">
+            <button type="button" className="brand-secondary-button" onClick={handleBackup}>
+              备份数据
+            </button>
+            <p className="section-copy">导出所有数据为 JSON 文件，方便迁移或备份。</p>
           </div>
-        </div>
+        </SurfaceCard>
 
-        {/* 系统操作 */}
-        <div className="bg-white rounded-lg p-4">
-          <h2 className="font-medium mb-3 text-red-600">系统</h2>
-          <Button color="danger" onClick={handleLogout}>
+        <SurfaceCard className="settings-section">
+          <p className="section-label">System</p>
+          <h2 className="section-title">系统操作</h2>
+          <button type="button" className="brand-primary-button" onClick={handleLogout}>
             退出登录
-          </Button>
-        </div>
+          </button>
+        </SurfaceCard>
       </div>
-
-      {/* 底部导航 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2">
-        <button onClick={() => navigate('/')} className="flex flex-col items-center text-gray-400">
-          <span className="text-xl">📋</span>
-          <span className="text-xs">时间线</span>
-        </button>
-        <button onClick={() => navigate('/statistics')} className="flex flex-col items-center text-gray-400">
-          <span className="text-xl">📊</span>
-          <span className="text-xs">统计</span>
-        </button>
-        <button className="flex flex-col items-center text-wedding-red">
-          <span className="text-xl">⚙️</span>
-          <span className="text-xs">设置</span>
-        </button>
-      </div>
-    </div>
+    </AppShell>
   )
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock axios before importing api
 vi.mock('axios', () => {
@@ -20,7 +20,7 @@ vi.mock('axios', () => {
   }
 })
 
-import api, { authAPI, timelineAPI, todoAPI, expenseAPI, memoAPI, attachmentAPI } from '../services/api'
+import { authAPI, timelineAPI, todoAPI, expenseAPI, memoAPI, attachmentAPI } from '../services/api'
 
 describe('API Service', () => {
   beforeEach(() => {
