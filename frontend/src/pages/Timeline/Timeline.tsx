@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Dialog, Popup, Toast } from 'antd-mobile'
+import { Popup, Toast } from 'antd-mobile'
 import AppShell from '../../components/layout/AppShell'
 import ThemedCalendarPicker from '../../components/ThemedCalendarPicker'
 import BrandHeader from '../../components/layout/BrandHeader'
@@ -9,7 +9,7 @@ import SurfaceCard from '../../components/ui/SurfaceCard'
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { timelineAPI, TimelineNode } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
-import NodeEditorForm from './NodeEditorForm'
+import NodeEditorModal from './NodeEditorModal'
 
 type NodeFormState = {
   name: string
@@ -324,17 +324,6 @@ export default function Timeline() {
 
   const summaryTitle = partnerId ? `${user?.username ?? ''} · 双人筹备中` : `${user?.username ?? ''} · 单人筹备`
   const deadlinePickerNode = nodes.find((node) => node.id === deadlinePickerNodeId) ?? null
-  const editDialogContent = (
-    <NodeEditorForm
-      mode="edit"
-      form={editForm}
-      onNameChange={(value) => setEditForm((current) => ({ ...current, name: value }))}
-      onDescriptionChange={(value) => setEditForm((current) => ({ ...current, description: value }))}
-      onDeadlineChange={(value) => setEditForm((current) => ({ ...current, deadline: value }))}
-      onStatusChange={(value) => setEditForm((current) => ({ ...current, status: value }))}
-      statusOptions={STATUS_OPTIONS}
-    />
-  )
 
   if (loading) {
     return <div className="app-loading-screen">加载中...</div>
@@ -586,82 +575,41 @@ export default function Timeline() {
         </div>
       </Popup>
 
-      <Dialog
+      <NodeEditorModal
         visible={isCreateModalOpen}
+        mode="create"
+        isMobile={isMobileDeadlinePicker}
         title="创建节点"
-        content={
-          <NodeEditorForm
-            mode="create"
-            form={createForm}
-            onNameChange={(value) => setCreateForm((current) => ({ ...current, name: value }))}
-            onDescriptionChange={(value) => setCreateForm((current) => ({ ...current, description: value }))}
-            onDeadlineChange={(value) => setCreateForm((current) => ({ ...current, deadline: value }))}
-            onStatusChange={(value) => setCreateForm((current) => ({ ...current, status: value }))}
-            statusOptions={STATUS_OPTIONS}
-          />
-        }
-        actions={[
-          [
-            { key: 'cancel', text: '取消' },
-            { key: 'confirm', text: '创建', bold: true },
-          ],
-        ]}
-        closeOnAction={false}
-        closeOnMaskClick
-        onAction={async (action) => {
-          if (action.key === 'cancel') {
-            closeCreateModal()
-            return
-          }
-          await handleCreateNode()
-        }}
+        eyebrow="New Node"
+        description="先定义名称、说明与时间，让时间线结构保持清晰。"
+        form={createForm}
+        statusOptions={STATUS_OPTIONS}
+        onNameChange={(value) => setCreateForm((current) => ({ ...current, name: value }))}
+        onDescriptionChange={(value) => setCreateForm((current) => ({ ...current, description: value }))}
+        onDeadlineChange={(value) => setCreateForm((current) => ({ ...current, deadline: value }))}
+        onStatusChange={(value) => setCreateForm((current) => ({ ...current, status: value }))}
+        confirmText="创建"
         onClose={closeCreateModal}
+        onSubmit={handleCreateNode}
       />
 
-      <Dialog
-        visible={editingNodeId !== null && !isMobileDeadlinePicker}
+      <NodeEditorModal
+        visible={editingNodeId !== null}
+        mode="edit"
+        isMobile={isMobileDeadlinePicker}
         title="编辑节点"
-        content={editDialogContent}
-        actions={[
-          [
-            { key: 'cancel', text: '取消' },
-            { key: 'confirm', text: '保存', bold: true },
-          ],
-        ]}
-        closeOnAction={false}
-        closeOnMaskClick
-        onAction={async (action) => {
-          if (action.key === 'cancel') {
-            closeEditModal()
-            return
-          }
-          await handleSaveEdit()
-        }}
+        eyebrow="Complete Edit"
+        description="在一个面板内调整节点名称、描述、状态与截止日期。"
+        form={editForm}
+        statusOptions={STATUS_OPTIONS}
+        onNameChange={(value) => setEditForm((current) => ({ ...current, name: value }))}
+        onDescriptionChange={(value) => setEditForm((current) => ({ ...current, description: value }))}
+        onDeadlineChange={(value) => setEditForm((current) => ({ ...current, deadline: value }))}
+        onStatusChange={(value) => setEditForm((current) => ({ ...current, status: value }))}
+        confirmText="保存"
         onClose={closeEditModal}
+        onSubmit={handleSaveEdit}
       />
-
-      <Popup
-        visible={editingNodeId !== null && isMobileDeadlinePicker}
-        onMaskClick={closeEditModal}
-        bodyStyle={{ borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
-      >
-        <div className="timeline-edit-drawer" data-testid="mobile-full-edit-drawer">
-          <div className="timeline-edit-drawer__header">
-            <h2 className="timeline-edit-drawer__title">编辑节点</h2>
-            <p className="section-label">Complete Edit</p>
-            <p className="section-copy">在一个面板内调整节点名称、描述、状态与截止日期。</p>
-          </div>
-          <div className="timeline-edit-drawer__body">{editDialogContent}</div>
-          <div className="timeline-edit-drawer__actions">
-            <button type="button" className="brand-secondary-button" onClick={closeEditModal}>
-              取消
-            </button>
-            <button type="button" className="brand-primary-button" onClick={handleSaveEdit}>
-              保存
-            </button>
-          </div>
-        </div>
-      </Popup>
     </AppShell>
   )
 }

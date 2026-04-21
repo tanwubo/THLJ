@@ -1069,7 +1069,7 @@ body,
 
 .timeline-edit-drawer {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 84vh;
   max-height: 92vh;
   padding: 22px 20px calc(20px + env(safe-area-inset-bottom));
@@ -1078,7 +1078,13 @@ body,
     rgba(255, 251, 246, 0.98);
 }
 
-.timeline-edit-drawer__header {
+.timeline-node-editor {
+  display: grid;
+  gap: 20px;
+  min-height: 100%;
+}
+
+.timeline-node-editor__header {
   display: grid;
   gap: 8px;
 }
@@ -1090,19 +1096,23 @@ body,
   color: var(--text-primary);
 }
 
-.timeline-edit-drawer__body {
+.timeline-node-editor__body {
   min-height: 0;
   overflow-y: auto;
   padding: 16px 2px 18px;
 }
 
-.timeline-edit-drawer__actions {
+.timeline-node-editor__actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   padding-top: 14px;
   border-top: 1px solid rgba(127, 23, 48, 0.08);
   background: rgba(255, 251, 246, 0.98);
+}
+
+.adm-dialog .timeline-node-editor {
+  min-width: min(420px, calc(100vw - 48px));
 }
 
 .adm-dialog-wrap .adm-dialog {
