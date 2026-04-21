@@ -18,6 +18,7 @@ interface Stats {
 
 export default function Statistics() {
   const { user, partnerId } = useAuthStore()
+  const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<Stats>({
     totalNodes: 0,
     completedNodes: 0,
@@ -49,6 +50,8 @@ export default function Statistics() {
       })
     } catch (error) {
       console.error('获取统计失败:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
