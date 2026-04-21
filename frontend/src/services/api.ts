@@ -35,6 +35,7 @@ export interface User {
   username: string
   email?: string
   inviteCode: string
+  isAdmin?: boolean
   partnerId?: number
   partner?: {
     id: number
@@ -77,6 +78,33 @@ export interface TimelineNode {
   progress: number
   createdAt: string
   updatedAt: string
+}
+
+export interface TimelineTemplateNode {
+  id: number
+  templateId: number
+  name: string
+  description?: string
+  order: number
+}
+
+export interface TimelineTemplate {
+  id: number
+  name: string
+  description?: string
+  isActive?: boolean
+  nodeCount?: number
+  nodes?: TimelineTemplateNode[]
+}
+
+export interface TimelineTemplatePayload {
+  name: string
+  description?: string
+  isActive: boolean
+  nodes: Array<{
+    name: string
+    description?: string
+  }>
 }
 
 export interface WorkbenchExpense extends Expense {
@@ -130,6 +158,26 @@ export const timelineAPI = {
 
   updateOrder: (nodes: { id: number; order: number }[]) =>
     api.post('/timeline/update-order', { nodes }),
+}
+
+export const timelineTemplateAPI = {
+  listTemplates: (includeInactive = false) =>
+    api.get<{ templates: TimelineTemplate[] }>(`/timeline-templates${includeInactive ? '?includeInactive=1' : ''}`),
+
+  getTemplate: (id: number) =>
+    api.get<TimelineTemplate>(`/timeline-templates/${id}`),
+
+  createTemplate: (data: TimelineTemplatePayload) =>
+    api.post<TimelineTemplate>('/timeline-templates', data),
+
+  updateTemplate: (id: number, data: TimelineTemplatePayload) =>
+    api.put<TimelineTemplate>(`/timeline-templates/${id}`, data),
+
+  deleteTemplate: (id: number) =>
+    api.delete(`/timeline-templates/${id}`),
+
+  applyTemplate: (templateId: number) =>
+    api.post('/timeline-templates/apply', { templateId }),
 }
 
 // 待办事项 API

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { Dialog, Input, Toast } from 'antd-mobile'
 import AppShell from '../../components/layout/AppShell'
@@ -185,6 +186,19 @@ export default function Settings() {
             <p className="section-copy">导出所有数据为 JSON 文件，方便迁移或备份。</p>
           </div>
         </SurfaceCard>
+
+        {user?.isAdmin ? (
+          <SurfaceCard className="settings-section">
+            <p className="section-label">Admin</p>
+            <h2 className="section-title">模板管理</h2>
+            <div className="settings-stack">
+              <Link to="/settings/timeline-templates" className="brand-secondary-button">
+                时间线模板管理
+              </Link>
+              <p className="section-copy">管理首页可用的时间线模板与模板节点内容。</p>
+            </div>
+          </SurfaceCard>
+        ) : null}
 
         <SurfaceCard className="settings-section">
           <p className="section-label">System</p>

@@ -4,6 +4,7 @@ import Login from './pages/Login/Login'
 import Timeline from './pages/Timeline/Timeline'
 import Statistics from './pages/Statistics/Statistics'
 import Settings from './pages/Settings/Settings'
+import TimelineTemplates from './pages/Settings/TimelineTemplates'
 import NodeDetail from './pages/NodeDetail/NodeDetail'
 import { useAuthStore } from './store/authStore'
 import { useAuthSocketLifecycle } from './hooks/useAuthSocketLifecycle'
@@ -49,6 +50,11 @@ function App() {
       <Route path="/settings" element={
         <ProtectedRoute>
           <Settings />
+        </ProtectedRoute>
+      } />
+      <Route path="/settings/timeline-templates" element={
+        <ProtectedRoute>
+          <TimelineTemplates />
         </ProtectedRoute>
       } />
       <Route path="/node/:id" element={

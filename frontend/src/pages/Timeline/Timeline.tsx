@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Popup, Toast } from 'antd-mobile'
+import { Dialog, Popup, Toast } from 'antd-mobile'
 import AppShell from '../../components/layout/AppShell'
 import ThemedCalendarPicker from '../../components/ThemedCalendarPicker'
 import BrandHeader from '../../components/layout/BrandHeader'
 import StatusPill, { statusLabelMap } from '../../components/ui/StatusPill'
 import SurfaceCard from '../../components/ui/SurfaceCard'
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
-import { timelineAPI, TimelineNode } from '../../services/api'
+import { timelineAPI, TimelineNode, TimelineTemplate, timelineTemplateAPI } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import NodeEditorModal from './NodeEditorModal'
+import TimelineTemplatePicker from './TimelineTemplatePicker'
 
 type NodeFormState = {
   name: string
@@ -46,6 +47,11 @@ export default function Timeline() {
   const [actionsMenuNodeId, setActionsMenuNodeId] = useState<number | null>(null)
   const [deadlinePickerNodeId, setDeadlinePickerNodeId] = useState<number | null>(null)
   const [isMobileDeadlinePicker, setIsMobileDeadlinePicker] = useState(() => window.matchMedia('(max-width: 767px)').matches)
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false)
+  const [templates, setTemplates] = useState<TimelineTemplate[]>([])
+  const [templateLoading, setTemplateLoading] = useState(false)
+  const [templateSubmitting, setTemplateSubmitting] = useState(false)
+  const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null)
 
   const fetchTimeline = async () => {
     try {
@@ -322,6 +328,62 @@ export default function Timeline() {
     navigate('/login')
   }
 
+  const loadTemplateDetail = async (templateId: number) => {
+    const response = await timelineTemplateAPI.getTemplate(templateId)
+    setTemplates((current) =>
+      current.map((template) =>
+        template.id === templateId ? { ...template, ...response.data } : template,
+      ),
+    )
+  }
+
+  const openTemplatePicker = async () => {
+    setTemplateLoading(true)
+    setIsTemplatePickerOpen(true)
+
+    try {
+      const response = await timelineTemplateAPI.listTemplates()
+      const nextTemplates = response.data.templates || []
+      setTemplates(nextTemplates)
+
+      const firstTemplateId = nextTemplates[0]?.id ?? null
+      setActiveTemplateId(firstTemplateId)
+
+      if (firstTemplateId) {
+        await loadTemplateDetail(firstTemplateId)
+      }
+    } catch (error) {
+      console.error('获取模板失败:', error)
+      Toast.show('获取模板失败')
+    } finally {
+      setTemplateLoading(false)
+    }
+  }
+
+  const handleSelectTemplate = async (templateId: number) => {
+    setActiveTemplateId(templateId)
+    await loadTemplateDetail(templateId)
+  }
+
+  const handleApplyTemplate = async () => {
+    if (!activeTemplateId) {
+      return
+    }
+
+    setTemplateSubmitting(true)
+
+    try {
+      await timelineTemplateAPI.applyTemplate(activeTemplateId)
+      Toast.show('模板已应用')
+      setIsTemplatePickerOpen(false)
+      await fetchTimeline()
+    } catch (error: any) {
+      Toast.show(error.response?.data?.error || '应用模板失败')
+    } finally {
+      setTemplateSubmitting(false)
+    }
+  }
+
   const summaryTitle = partnerId ? `${user?.username ?? ''} · 双人筹备中` : `${user?.username ?? ''} · 单人筹备`
   const deadlinePickerNode = nodes.find((node) => node.id === deadlinePickerNodeId) ?? null
 
@@ -366,10 +428,15 @@ export default function Timeline() {
         {nodes.length === 0 ? (
           <SurfaceCard className="timeline-empty-state">
             <p className="timeline-empty-state__title">还没有任何节点</p>
-            <p className="timeline-empty-state__copy">先建立第一个里程碑，把婚礼筹备拆成清晰可执行的阶段。</p>
-            <button type="button" className="brand-primary-button" onClick={openCreateModal}>
-              创建第一个节点
-            </button>
+            <p className="timeline-empty-state__copy">可以先从模板初始化，也可以继续空白创建自己的第一个里程碑。</p>
+            <div className="timeline-form-actions">
+              <button type="button" className="brand-primary-button" onClick={openTemplatePicker}>
+                选择模板
+              </button>
+              <button type="button" className="brand-secondary-button" onClick={openCreateModal}>
+                创建第一个节点
+              </button>
+            </div>
           </SurfaceCard>
         ) : (
           <div className="timeline-node-list">
@@ -609,6 +676,17 @@ export default function Timeline() {
         confirmText="保存"
         onClose={closeEditModal}
         onSubmit={handleSaveEdit}
+      />
+
+      <TimelineTemplatePicker
+        visible={isTemplatePickerOpen}
+        templates={templates}
+        activeTemplateId={activeTemplateId}
+        loading={templateLoading}
+        submitting={templateSubmitting}
+        onSelect={handleSelectTemplate}
+        onClose={() => setIsTemplatePickerOpen(false)}
+        onApply={handleApplyTemplate}
       />
     </AppShell>
   )

@@ -2,38 +2,13 @@ import { Request, Response } from 'express';
 import { query, run } from '../db';
 import { AuthRequest } from '../middleware/auth';
 
-// 9个标准婚嫁节点
-const DEFAULT_NODES = [
-  { name: '确定结婚意向', order: 1 },
-  { name: '双方父母见面', order: 2 },
-  { name: '男方上门提亲', order: 3 },
-  { name: '彩礼嫁妆三金协商', order: 4 },
-  { name: '订婚仪式', order: 5 },
-  { name: '婚前筹备', order: 6 },
-  { name: '民政局领证', order: 7 },
-  { name: '婚礼举办', order: 8 },
-  { name: '婚后费用结算收尾', order: 9 },
-];
-
 // 获取用户时间线
 export const getTimeline = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const dataOwnerId = req.user?.dataOwnerId ?? userId;
 
-    // 检查用户是否有节点
-    let nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [dataOwnerId]);
-
-    // 首次登录，自动创建9个标准节点
-    if (nodes.length === 0) {
-      for (const node of DEFAULT_NODES) {
-        await run(
-          'INSERT INTO timeline_nodes (user_id, name, "order", status) VALUES (?, ?, ?, ?)',
-          [dataOwnerId, node.name, node.order, 'pending']
-        );
-      }
-      nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [dataOwnerId]);
-    }
+    const nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [dataOwnerId]);
 
     // 计算每个节点的进度（基于待办完成情况）
     const nodesWithProgress = nodes.map((node: any) => {

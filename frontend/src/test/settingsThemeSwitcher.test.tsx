@@ -115,4 +115,28 @@ describe('Settings theme switcher', () => {
     expect(dialogConfirmSpy).toHaveBeenCalledTimes(1)
     expect(unbindPartner).toHaveBeenCalledTimes(1)
   })
+
+  it('shows the timeline template management entry for admins only', () => {
+    useAuthStore.setState({
+      user: {
+        id: 1,
+        username: 'alice',
+        inviteCode: 'ABCD12',
+        isAdmin: true,
+        partnerId: null,
+        createdAt: '2026-01-01',
+        lastLogin: '2026-01-01',
+      } as any,
+    })
+
+    render(
+      <ThemeProvider>
+        <MemoryRouter>
+          <Settings />
+        </MemoryRouter>
+      </ThemeProvider>,
+    )
+
+    expect(screen.getByRole('link', { name: '时间线模板管理' })).toBeInTheDocument()
+  })
 })

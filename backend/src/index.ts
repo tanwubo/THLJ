@@ -6,6 +6,7 @@ import { bootstrapDatabase } from './bootstrap';
 import { setupSocket } from './socket';
 import authRoutes from './routes/authRoutes';
 import timelineRoutes from './routes/timelineRoutes';
+import timelineTemplateRoutes from './routes/timelineTemplateRoutes';
 import todoRoutes from './routes/todoRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import memoRoutes from './routes/memoRoutes';
@@ -40,6 +41,7 @@ app.use(express.static('public'));
 // 路由
 app.use('/api/auth', authRoutes);
 app.use('/api/timeline', timelineRoutes);
+app.use('/api/timeline-templates', timelineTemplateRoutes);
 app.use('/api/todos', todoRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/memos', memoRoutes);

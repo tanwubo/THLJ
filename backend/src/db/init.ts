@@ -130,6 +130,30 @@ export async function applyWorkbenchSchema(adapter: SchemaAdapter) {
 
   // 操作日志表
   await adapter.run(`
+    CREATE TABLE IF NOT EXISTS timeline_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await adapter.run(`
+    CREATE TABLE IF NOT EXISTS timeline_template_nodes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      "order" INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (template_id) REFERENCES timeline_templates(id)
+    )
+  `);
+
+  await adapter.run(`
     CREATE TABLE IF NOT EXISTS operation_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,

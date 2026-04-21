@@ -5,6 +5,7 @@ import { run, query, runInTransaction } from '../db'
 import { AuthRequest } from '../middleware/auth'
 import crypto from 'crypto'
 import { getUserPartnershipState, replaceUserDataFromOwner, requireUserPartnershipState } from '../services/partnership'
+import { isAdminUsername } from '../services/admin'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'wedding-manager-secret'
 const SALT_ROUNDS = 10
@@ -57,26 +58,6 @@ export async function register(req: AuthRequest, res: Response) {
     const userId = result.lastInsertRowid
     await run('UPDATE users SET data_owner_id = ? WHERE id = ?', [userId, userId])
 
-    // 为新用户初始化默认时间线节点
-    const defaultNodes = [
-      { name: '确定结婚意向', order: 1 },
-      { name: '双方父母见面', order: 2 },
-      { name: '男方上门提亲', order: 3 },
-      { name: '彩礼嫁妆三金协商', order: 4 },
-      { name: '订婚仪式', order: 5 },
-      { name: '婚前筹备', order: 6 },
-      { name: '民政局领证', order: 7 },
-      { name: '婚礼举办', order: 8 },
-      { name: '婚后费用结算收尾', order: 9 }
-    ]
-
-    for (const node of defaultNodes) {
-      await run(
-        'INSERT INTO timeline_nodes (user_id, name, "order") VALUES (?, ?, ?)',
-        [userId, node.name, node.order]
-      )
-    }
-
     // 生成JWT token
     const token = jwt.sign(
       { id: userId, username, partnerId: null },
@@ -91,7 +72,8 @@ export async function register(req: AuthRequest, res: Response) {
         username,
         email,
         inviteCode,
-        partnerId: null
+        partnerId: null,
+        isAdmin: isAdminUsername(username),
       }
     })
   } catch (error) {
@@ -137,7 +119,8 @@ export async function login(req: AuthRequest, res: Response) {
         username: user.username,
         email: user.email,
         inviteCode: user.invite_code,
-        partnerId: user.partner_id
+        partnerId: user.partner_id,
+        isAdmin: isAdminUsername(user.username),
       }
     })
   } catch (error) {
@@ -359,7 +342,8 @@ export async function getProfile(req: AuthRequest, res: Response) {
       partnerId: user.partner_id,
       partner,
       createdAt: user.created_at,
-      lastLogin: user.last_login
+      lastLogin: user.last_login,
+      isAdmin: isAdminUsername(user.username),
     })
   } catch (error) {
     console.error('Get profile error:', error)

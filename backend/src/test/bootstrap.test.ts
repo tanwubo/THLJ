@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../db', () => ({
   initDB: vi.fn(),
   exec: vi.fn(),
+  query: vi.fn(() => [{ id: 1 }]),
+  run: vi.fn(),
+  runInTransaction: vi.fn(),
   db: {
     exec: vi.fn(),
   },

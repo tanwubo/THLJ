@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getNodeWorkbench } from '../controllers/timelineController'
+import { getNodeWorkbench, getTimeline } from '../controllers/timelineController'
 import { deleteTodo } from '../controllers/todoController'
 
 // Mock the db module
@@ -108,6 +108,29 @@ describe('Timeline Controller Logic', () => {
       const totalProgress = nodes.reduce((sum: number, n: any) => sum + (n.progress || 0), 0)
       const overallProgress = nodes.length > 0 ? Math.round(totalProgress / nodes.length) : 0
       expect(overallProgress).toBe(0)
+    })
+  })
+
+  describe('empty timeline behavior', () => {
+    it('returns an empty timeline instead of auto-seeding default nodes', async () => {
+      const queryMock = query as unknown as ReturnType<typeof vi.fn>
+      const runMock = run as unknown as ReturnType<typeof vi.fn>
+
+      queryMock.mockImplementation((sql: string) => {
+        if (sql === 'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC') {
+          return []
+        }
+
+        return []
+      })
+
+      const json = vi.fn()
+      const res = { json, status: vi.fn().mockReturnValue({ json }) } as any
+
+      await getTimeline({ user: { id: 1, dataOwnerId: 1 } } as any, res)
+
+      expect(json).toHaveBeenCalledWith({ nodes: [], overallProgress: 0 })
+      expect(runMock).not.toHaveBeenCalled()
     })
   })
 })

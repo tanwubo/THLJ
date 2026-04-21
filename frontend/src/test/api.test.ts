@@ -20,7 +20,7 @@ vi.mock('axios', () => {
   }
 })
 
-import { authAPI, timelineAPI, todoAPI, expenseAPI, memoAPI, attachmentAPI } from '../services/api'
+import { authAPI, timelineAPI, timelineTemplateAPI, todoAPI, expenseAPI, memoAPI, attachmentAPI } from '../services/api'
 
 describe('API Service', () => {
   beforeEach(() => {
@@ -77,6 +77,32 @@ describe('API Service', () => {
 
     it('should have getWorkbench method', () => {
       expect(typeof timelineAPI.getWorkbench).toBe('function')
+    })
+  })
+
+  describe('timelineTemplateAPI', () => {
+    it('should have listTemplates method', () => {
+      expect(typeof timelineTemplateAPI.listTemplates).toBe('function')
+    })
+
+    it('should have getTemplate method', () => {
+      expect(typeof timelineTemplateAPI.getTemplate).toBe('function')
+    })
+
+    it('should have createTemplate method', () => {
+      expect(typeof timelineTemplateAPI.createTemplate).toBe('function')
+    })
+
+    it('should have updateTemplate method', () => {
+      expect(typeof timelineTemplateAPI.updateTemplate).toBe('function')
+    })
+
+    it('should have deleteTemplate method', () => {
+      expect(typeof timelineTemplateAPI.deleteTemplate).toBe('function')
+    })
+
+    it('should have applyTemplate method', () => {
+      expect(typeof timelineTemplateAPI.applyTemplate).toBe('function')
     })
   })
 

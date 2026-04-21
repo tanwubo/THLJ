@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Timeline from '../pages/Timeline/Timeline'
-import { timelineAPI } from '../services/api'
+import { timelineAPI, timelineTemplateAPI } from '../services/api'
 
 const mockNavigate = vi.fn()
 const mockEmitRealtimeEvent = vi.fn()
@@ -44,12 +44,21 @@ vi.mock('../services/api', async () => {
       updateNode: vi.fn(),
       deleteNode: vi.fn(),
     },
+    timelineTemplateAPI: {
+      ...actual.timelineTemplateAPI,
+      listTemplates: vi.fn(),
+      getTemplate: vi.fn(),
+      applyTemplate: vi.fn(),
+    },
   }
 })
 
 const getTimelineMock = vi.mocked(timelineAPI.getTimeline)
 const createNodeMock = vi.mocked(timelineAPI.createNode)
 const updateNodeMock = vi.mocked(timelineAPI.updateNode)
+const listTemplatesMock = vi.mocked(timelineTemplateAPI.listTemplates)
+const getTemplateMock = vi.mocked(timelineTemplateAPI.getTemplate)
+const applyTemplateMock = vi.mocked(timelineTemplateAPI.applyTemplate)
 
 function renderTimeline() {
   render(
@@ -89,8 +98,80 @@ describe('Timeline modal flows', () => {
     getTimelineMock.mockResolvedValue({
       data: { nodes: initialNodes, overallProgress: 10 },
     } as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+    listTemplatesMock.mockResolvedValue({
+      data: {
+        templates: [{ id: 1, name: '标准婚礼时间线', description: '默认婚礼阶段模板', nodeCount: 2 }],
+      },
+    } as Awaited<ReturnType<typeof timelineTemplateAPI.listTemplates>>)
+    getTemplateMock.mockResolvedValue({
+      data: {
+        id: 1,
+        name: '标准婚礼时间线',
+        description: '默认婚礼阶段模板',
+        nodes: [
+          { id: 11, templateId: 1, name: '确定结婚意向', description: '先明确双方意愿', order: 1 },
+          { id: 12, templateId: 1, name: '双方父母见面', description: '安排正式见面沟通', order: 2 },
+        ],
+      },
+    } as Awaited<ReturnType<typeof timelineTemplateAPI.getTemplate>>)
+    applyTemplateMock.mockResolvedValue({ data: { success: true } } as Awaited<ReturnType<typeof timelineTemplateAPI.applyTemplate>>)
     createNodeMock.mockResolvedValue({ data: initialNodes[0] } as Awaited<ReturnType<typeof timelineAPI.createNode>>)
     updateNodeMock.mockResolvedValue({ data: initialNodes[0] } as Awaited<ReturnType<typeof timelineAPI.updateNode>>)
+  })
+
+  it('shows template selection and create-first-node actions when the timeline is empty', async () => {
+    getTimelineMock.mockResolvedValue({
+      data: { nodes: [], overallProgress: 0 },
+    } as unknown as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+
+    renderTimeline()
+
+    expect(await screen.findByRole('button', { name: '选择模板' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '创建第一个节点' })).toBeInTheDocument()
+  })
+
+  it('hides the template entry once timeline nodes exist', async () => {
+    renderTimeline()
+
+    expect(await screen.findByText('订酒店')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '选择模板' })).toBeNull()
+  })
+
+  it('refreshes timeline nodes after applying a template', async () => {
+    getTimelineMock
+      .mockResolvedValueOnce({
+        data: { nodes: [], overallProgress: 0 },
+      } as unknown as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+      .mockResolvedValueOnce({
+        data: {
+          nodes: [
+            {
+              id: 9,
+              name: '确定结婚意向',
+              description: '先明确双方意愿',
+              status: 'pending',
+              order: 1,
+              deadline: '',
+              progress: 0,
+              createdAt: '2026-04-01',
+              updatedAt: '2026-04-01',
+            },
+          ],
+          overallProgress: 0,
+        },
+      } as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+
+    renderTimeline()
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择模板' }))
+    fireEvent.click(await screen.findByRole('button', { name: '使用此模板' }))
+
+    await waitFor(() => {
+      expect(applyTemplateMock).toHaveBeenCalledWith(1)
+    })
+
+    expect((await screen.findAllByText('确定结婚意向')).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: '选择模板' })).toBeNull()
   })
 
   it('creates a node from a modal and uses DateField instead of a raw date input', async () => {
