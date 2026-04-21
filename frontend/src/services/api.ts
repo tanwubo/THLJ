@@ -1,7 +1,8 @@
 import axios from 'axios'
+import { getApiBaseUrl } from '../config/runtime'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: getApiBaseUrl(),
   timeout: 10000,
 })
 
@@ -78,6 +79,25 @@ export interface TimelineNode {
   updatedAt: string
 }
 
+export interface WorkbenchExpense extends Expense {
+  todoId: number
+}
+
+export interface WorkbenchAttachment extends Attachment {
+  todoId: number
+}
+
+export interface WorkbenchTodo extends Todo {
+  expenses: WorkbenchExpense[]
+  attachments: WorkbenchAttachment[]
+}
+
+export interface NodeWorkbench {
+  node: TimelineNode
+  todos: WorkbenchTodo[]
+  memo: Memo | null
+}
+
 export interface CreateNodeData {
   name: string
   description?: string
@@ -95,6 +115,9 @@ export interface UpdateNodeData {
 export const timelineAPI = {
   getTimeline: () =>
     api.get<{ nodes: TimelineNode[]; overallProgress: number }>('/timeline'),
+
+  getWorkbench: (id: number) =>
+    api.get<NodeWorkbench>(`/timeline/${id}/workbench`),
 
   createNode: (data: CreateNodeData) =>
     api.post<TimelineNode>('/timeline', data),
@@ -138,6 +161,7 @@ export const todoAPI = {
 export interface Expense {
   id: number
   nodeId: number
+  todoId?: number
   type: 'income' | 'expense'
   amount: number
   category: string
@@ -155,7 +179,7 @@ export interface ExpenseStats {
 export const expenseAPI = {
   getExpenses: (nodeId: number) =>
     api.get<{ expenses: Expense[]; stats: ExpenseStats; categories: { income: string[]; expense: string[] } }>(`/expenses?nodeId=${nodeId}`),
-  createExpense: (data: { nodeId: number; type: string; amount: number; category: string; description?: string }) =>
+  createExpense: (data: { todoId: number; type: string; amount: number; category: string; description?: string }) =>
     api.post<Expense>('/expenses', data),
   updateExpense: (id: number, data: Partial<Expense>) =>
     api.put<Expense>(`/expenses/${id}`, data),
@@ -182,6 +206,7 @@ export const memoAPI = {
 export interface Attachment {
   id: number
   nodeId: number
+  todoId?: number
   fileName: string
   filePath: string
   fileSize: number
@@ -193,9 +218,9 @@ export interface Attachment {
 export const attachmentAPI = {
   getAttachments: (nodeId: number) =>
     api.get<Attachment[]>(`/attachments?nodeId=${nodeId}`),
-  uploadAttachment: (nodeId: number, file: File) => {
+  uploadAttachment: (todoId: number, file: File) => {
     const formData = new FormData();
-    formData.append('nodeId', String(nodeId));
+    formData.append('todoId', String(todoId));
     formData.append('file', file);
     return api.post<Attachment>('/attachments', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

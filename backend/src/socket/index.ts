@@ -1,66 +1,121 @@
-import { Server, Socket } from 'socket.io';
+import jwt from 'jsonwebtoken'
+import { Server, Socket } from 'socket.io'
 
-interface RoomData {
-  userId: number;
-  partnerId: number;
+const JWT_SECRET = process.env.JWT_SECRET || 'wedding-manager-secret'
+const REALTIME_EVENTS = [
+  'node_update',
+  'todo_update',
+  'expense_update',
+  'memo_update',
+  'attachment_update',
+] as const
+
+type RealtimeEvent = (typeof REALTIME_EVENTS)[number]
+
+interface SocketUser {
+  id: number
+  username: string
+  partnerId?: number | null
+}
+
+interface RealtimePayload {
+  action: string
+  payload: any
+}
+
+interface AuthenticatedSocket extends Socket {
+  data: Socket['data'] & {
+    user?: SocketUser
+  }
+}
+
+function getPairRoom(user: SocketUser) {
+  if (!user.partnerId) {
+    return null
+  }
+  return [user.id, user.partnerId].sort((a, b) => a - b).join('_')
+}
+
+export function createSocketAuthMiddleware(socket: AuthenticatedSocket, next: (err?: Error) => void) {
+  const token = socket.handshake.auth?.token
+  if (!token) {
+    next(new Error('未授权的实时连接'))
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as SocketUser
+    socket.data.user = {
+      id: decoded.id,
+      username: decoded.username,
+      partnerId: decoded.partnerId ?? null,
+    }
+    next()
+  } catch {
+    next(new Error('实时连接认证失败'))
+  }
+}
+
+function joinAuthenticatedRoom(socket: AuthenticatedSocket) {
+  const user = socket.data.user
+  const roomId = user ? getPairRoom(user) : null
+  if (!user || !roomId) {
+    return
+  }
+  socket.join(roomId)
+  console.log(`User ${user.id} joined room ${roomId}`)
+}
+
+function leaveAuthenticatedRoom(socket: AuthenticatedSocket) {
+  const user = socket.data.user
+  const roomId = user ? getPairRoom(user) : null
+  if (!user || !roomId) {
+    return
+  }
+  socket.leave(roomId)
+}
+
+function broadcastToAuthenticatedRoom(socket: AuthenticatedSocket, event: RealtimeEvent, data: RealtimePayload) {
+  const user = socket.data.user
+  const roomId = user ? getPairRoom(user) : null
+  if (!user || !roomId) {
+    return
+  }
+  socket.to(roomId).emit(event, {
+    action: data.action,
+    payload: data.payload,
+  })
+}
+
+export function createSocketEventRegistrar(socket: AuthenticatedSocket) {
+  socket.on('join_room', () => {
+    joinAuthenticatedRoom(socket)
+  })
+
+  socket.on('leave_room', () => {
+    leaveAuthenticatedRoom(socket)
+  })
+
+  for (const event of REALTIME_EVENTS) {
+    socket.on(event, (data: RealtimePayload) => {
+      broadcastToAuthenticatedRoom(socket, event, data)
+    })
+  }
 }
 
 export function setupSocket(io: Server) {
+  io.use((socket, next) => createSocketAuthMiddleware(socket as AuthenticatedSocket, next))
+
   io.on('connection', (socket: Socket) => {
-    console.log('User connected:', socket.id);
+    const authenticatedSocket = socket as AuthenticatedSocket
+    const user = authenticatedSocket.data.user
 
-    // 加入配对房间
-    socket.on('join_room', async (data: RoomData) => {
-      const { userId, partnerId } = data;
-      const roomId = [userId, partnerId].sort().join('_');
-      socket.join(roomId);
-      console.log(`User ${userId} joined room ${roomId}`);
-    });
-
-    // 离开房间
-    socket.on('leave_room', (data: RoomData) => {
-      const { userId, partnerId } = data;
-      const roomId = [userId, partnerId].sort().join('_');
-      socket.leave(roomId);
-    });
-
-    // 节点更新广播
-    socket.on('node_update', (data: { userId: number; partnerId: number; action: string; payload: any }) => {
-      const { userId, partnerId } = data;
-      const roomId = [userId, partnerId].sort().join('_');
-      socket.to(roomId).emit('node_update', { action: data.action, payload: data.payload });
-    });
-
-    // 待办更新广播
-    socket.on('todo_update', (data: { userId: number; partnerId: number; action: string; payload: any }) => {
-      const { userId, partnerId } = data;
-      const roomId = [userId, partnerId].sort().join('_');
-      socket.to(roomId).emit('todo_update', { action: data.action, payload: data.payload });
-    });
-
-    // 费用更新广播
-    socket.on('expense_update', (data: { userId: number; partnerId: number; action: string; payload: any }) => {
-      const { userId, partnerId } = data;
-      const roomId = [userId, partnerId].sort().join('_');
-      socket.to(roomId).emit('expense_update', { action: data.action, payload: data.payload });
-    });
-
-    // 备忘录更新广播
-    socket.on('memo_update', (data: { userId: number; partnerId: number; action: string; payload: any }) => {
-      const { userId, partnerId } = data;
-      const roomId = [userId, partnerId].sort().join('_');
-      socket.to(roomId).emit('memo_update', { action: data.action, payload: data.payload });
-    });
-
-    // 附件更新广播
-    socket.on('attachment_update', (data: { userId: number; partnerId: number; action: string; payload: any }) => {
-      const { userId, partnerId } = data;
-      const roomId = [userId, partnerId].sort().join('_');
-      socket.to(roomId).emit('attachment_update', { action: data.action, payload: data.payload });
-    });
+    console.log('User connected:', socket.id, user?.id)
+    createSocketEventRegistrar(authenticatedSocket)
+    joinAuthenticatedRoom(authenticatedSocket)
 
     socket.on('disconnect', () => {
-      console.log('User disconnected:', socket.id);
-    });
-  });
+      console.log('User disconnected:', socket.id)
+    })
+  })
 }

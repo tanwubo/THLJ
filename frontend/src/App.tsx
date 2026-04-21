@@ -6,6 +6,7 @@ import Statistics from './pages/Statistics/Statistics'
 import Settings from './pages/Settings/Settings'
 import NodeDetail from './pages/NodeDetail/NodeDetail'
 import { useAuthStore } from './store/authStore'
+import { useAuthSocketLifecycle } from './hooks/useAuthSocketLifecycle'
 
 // 受保护的路由组件
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
@@ -21,6 +22,7 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 
 function App() {
   const { token, loadProfile, _hasHydrated } = useAuthStore()
+  useAuthSocketLifecycle()
 
   useEffect(() => {
     if (token && _hasHydrated) {

@@ -6,9 +6,10 @@ import { deleteTodo } from '../controllers/todoController'
 vi.mock('../db', () => ({
   query: vi.fn(),
   run: vi.fn(),
+  runInTransaction: vi.fn(),
 }))
 
-import { query, run } from '../db'
+import { query, run, runInTransaction } from '../db'
 
 // Import the functions to test (we'll test the logic)
 describe('Timeline Controller Logic', () => {
@@ -297,7 +298,7 @@ describe('Workbench aggregation', () => {
 
 describe('Todo deletion', () => {
   const queryMock = query as unknown as ReturnType<typeof vi.fn>
-  const runMock = run as unknown as ReturnType<typeof vi.fn>
+  const runInTransactionMock = runInTransaction as unknown as ReturnType<typeof vi.fn>
 
   function createResponse() {
     const json = vi.fn()
@@ -308,37 +309,48 @@ describe('Todo deletion', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     queryMock.mockReset()
-    runMock.mockReset()
+    runInTransactionMock.mockReset()
   })
 
-  it('deletes todo-linked expenses and attachments when deleting a todo', async () => {
-    const deletedTables: string[] = []
-
-    queryMock.mockImplementation((sql: string) => {
+  it('deletes todo-linked expenses and attachments atomically when deleting a todo', async () => {
+    queryMock.mockImplementation((sql: string, params: any[] = []) => {
       if (sql === 'SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?') {
+        expect(params).toEqual(['7', 99])
         return [{ id: 7, node_id: 1 }]
       }
       return []
     })
 
-    runMock.mockImplementation(async (sql: string) => {
-      if (sql === 'DELETE FROM attachments WHERE todo_id = ?') {
-        deletedTables.push('attachments')
-      }
-      if (sql === 'DELETE FROM expense_records WHERE todo_id = ?') {
-        deletedTables.push('expense_records')
-      }
-      if (sql === 'DELETE FROM todo_items WHERE id = ?') {
-        deletedTables.push('todo_items')
-      }
-      return { changes: 1 }
-    })
-
-    const { res } = createResponse()
+    const { json, res } = createResponse()
     const req = { params: { id: '7' }, user: { id: 99 } } as any
 
     await deleteTodo(req, res)
 
-    expect(deletedTables).toEqual(['attachments', 'expense_records', 'todo_items'])
+    expect(runInTransactionMock).toHaveBeenCalledTimes(1)
+    expect(runInTransactionMock).toHaveBeenCalledWith([
+      { sql: 'DELETE FROM attachments WHERE todo_id = ?', params: ['7'] },
+      { sql: 'DELETE FROM expense_records WHERE todo_id = ?', params: ['7'] },
+      { sql: 'DELETE FROM todo_items WHERE id = ?', params: ['7'] },
+    ])
+    expect(json).toHaveBeenCalledWith({ success: true })
+  })
+
+  it('returns 404 and skips cascade deletes when the todo does not belong to the user', async () => {
+    queryMock.mockImplementation((sql: string, params: any[] = []) => {
+      if (sql === 'SELECT * FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?') {
+        expect(params).toEqual(['7', 99])
+        return []
+      }
+      return []
+    })
+
+    const { json, status, res } = createResponse()
+    const req = { params: { id: '7' }, user: { id: 99 } } as any
+
+    await deleteTodo(req, res)
+
+    expect(runInTransactionMock).not.toHaveBeenCalled()
+    expect(status).toHaveBeenCalledWith(404)
+    expect(json).toHaveBeenCalledWith({ error: '待办不存在' })
   })
 })

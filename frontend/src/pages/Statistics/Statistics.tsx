@@ -27,7 +27,6 @@ export default function Statistics() {
     completedTodos: 0,
     overallProgress: 0,
   })
-  const [loading, setLoading] = useState(true)
 
   const fetchStats = async () => {
     try {
@@ -47,8 +46,6 @@ export default function Statistics() {
       })
     } catch (error) {
       console.error('获取统计失败:', error)
-    } finally {
-      setLoading(false)
     }
   }
 

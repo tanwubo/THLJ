@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { query, run } from '../db';
+import { query, run, runInTransaction } from '../db';
 import { AuthRequest } from '../middleware/auth';
 
 export const getTodos = async (req: AuthRequest, res: Response) => {
@@ -104,9 +104,12 @@ export const deleteTodo = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: '待办不存在' });
     }
 
-    await run('DELETE FROM attachments WHERE todo_id = ?', [id]);
-    await run('DELETE FROM expense_records WHERE todo_id = ?', [id]);
-    await run('DELETE FROM todo_items WHERE id = ?', [id]);
+    await runInTransaction([
+      { sql: 'DELETE FROM attachments WHERE todo_id = ?', params: [id] },
+      { sql: 'DELETE FROM expense_records WHERE todo_id = ?', params: [id] },
+      { sql: 'DELETE FROM todo_items WHERE id = ?', params: [id] },
+    ]);
+
     res.json({ success: true });
   } catch (error: any) {
     console.error('删除待办失败:', error);

@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
-import { initDB } from './db';
+import { bootstrapDatabase } from './bootstrap';
 import { setupSocket } from './socket';
 import authRoutes from './routes/authRoutes';
 import timelineRoutes from './routes/timelineRoutes';
@@ -16,7 +16,12 @@ const server = http.createServer(app);
 
 const corsOrigins = process.env.NODE_ENV === 'production'
   ? ['https://yourdomain.com']
-  : ['http://localhost:5173', 'http://localhost:3000'];
+  : [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ];
 
 const io = new Server(server, {
   cors: {
@@ -47,7 +52,7 @@ app.get('/api/health', (req, res) => {
 setupSocket(io);
 
 // 初始化数据库后启动服务器
-initDB().then(() => {
+bootstrapDatabase().then(() => {
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });

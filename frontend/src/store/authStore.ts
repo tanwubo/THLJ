@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { io, Socket } from 'socket.io-client'
 import { authAPI, User } from '../services/api'
 import { Toast } from 'antd-mobile'
+import { getSocketServerUrl } from '../config/runtime'
 
 interface AuthState {
   token: string | null
@@ -15,6 +16,7 @@ interface AuthState {
   setHasHydrated: (state: boolean) => void
   connectSocket: () => void
   disconnectSocket: () => void
+  emitRealtimeEvent: (event: string, action: string, payload?: any) => void
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, email?: string) => Promise<void>
   bindPartner: (inviteCode: string) => Promise<void>
@@ -39,20 +41,12 @@ export const useAuthStore = create<AuthState>()(
         const state = useAuthStore.getState()
         if (!state.user?.partnerId || state.socket || !state.token) return
 
-        const socketUrl = process.env.NODE_ENV === 'production'
-          ? window.location.origin
-          : 'http://localhost:3001'
+        const socketUrl = getSocketServerUrl()
 
         const newSocket = io(socketUrl, {
           auth: { token: state.token },
+          path: '/socket.io',
           transports: ['websocket', 'polling'],
-        })
-
-        newSocket.on('connect', () => {
-          newSocket.emit('join_room', {
-            userId: state.user?.id,
-            partnerId: state.user?.partnerId,
-          })
         })
 
         useAuthStore.setState({ socket: newSocket })
@@ -61,13 +55,18 @@ export const useAuthStore = create<AuthState>()(
       disconnectSocket: () => {
         const state = useAuthStore.getState()
         if (state.socket) {
-          state.socket.emit('leave_room', {
-            userId: state.user?.id,
-            partnerId: state.user?.partnerId,
-          })
+          state.socket.emit('leave_room')
           state.socket.disconnect()
           useAuthStore.setState({ socket: null })
         }
+      },
+
+      emitRealtimeEvent: (event: string, action: string, payload?: any) => {
+        const state = useAuthStore.getState()
+        if (!state.socket || !state.user?.partnerId) {
+          return
+        }
+        state.socket.emit(event, { action, payload })
       },
 
       login: async (username: string, password: string) => {
@@ -143,10 +142,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         const state = useAuthStore.getState()
         if (state.socket) {
-          state.socket.emit('leave_room', {
-            userId: state.user?.id,
-            partnerId: state.user?.partnerId,
-          })
+          state.socket.emit('leave_room')
           state.socket.disconnect()
         }
         set({ token: null, user: null, partnerId: null, partner: null, socket: null })

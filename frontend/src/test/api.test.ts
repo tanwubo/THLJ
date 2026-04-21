@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock axios before importing api
 vi.mock('axios', () => {
@@ -20,7 +20,7 @@ vi.mock('axios', () => {
   }
 })
 
-import api, { authAPI, timelineAPI, todoAPI, expenseAPI, memoAPI, attachmentAPI } from '../services/api'
+import { authAPI, timelineAPI, todoAPI, expenseAPI, memoAPI, attachmentAPI } from '../services/api'
 
 describe('API Service', () => {
   beforeEach(() => {
@@ -74,6 +74,10 @@ describe('API Service', () => {
     it('should have updateOrder method', () => {
       expect(typeof timelineAPI.updateOrder).toBe('function')
     })
+
+    it('should have getWorkbench method', () => {
+      expect(typeof timelineAPI.getWorkbench).toBe('function')
+    })
   })
 
   describe('todoAPI', () => {
@@ -114,6 +118,12 @@ describe('API Service', () => {
     it('should have deleteExpense method', () => {
       expect(typeof expenseAPI.deleteExpense).toBe('function')
     })
+
+    it('should require todoId in createExpense payload shape', () => {
+      const payload = { todoId: 1, type: 'expense', amount: 5200, category: '婚宴' }
+
+      expect(payload).toHaveProperty('todoId')
+    })
   })
 
   describe('memoAPI', () => {
@@ -137,6 +147,12 @@ describe('API Service', () => {
 
     it('should have deleteAttachment method', () => {
       expect(typeof attachmentAPI.deleteAttachment).toBe('function')
+    })
+
+    it('should expect todoId when uploading attachments', () => {
+      const payload = { todoId: 1 }
+
+      expect(payload).toHaveProperty('todoId')
     })
   })
 

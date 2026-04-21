@@ -62,6 +62,30 @@ export async function exec(sql: string): Promise<void> {
   await saveDB();
 }
 
+type TransactionOperation = {
+  sql: string;
+  params?: any[];
+};
+
+export async function runInTransaction(operations: TransactionOperation[]): Promise<void> {
+  db.exec('BEGIN');
+
+  try {
+    for (const operation of operations) {
+      const stmt = db.prepare(operation.sql);
+      stmt.bind(operation.params ?? []);
+      stmt.step();
+      stmt.free();
+    }
+
+    db.exec('COMMIT');
+    await saveDB();
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 export { db };
 
 // 别名导出，保持向后兼容

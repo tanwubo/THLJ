@@ -69,7 +69,7 @@ describe('Auth Controller Logic', () => {
     })
 
     it('should check if user already has partner', () => {
-      const hasPartner = (partnerId: number | null) => {
+      const hasPartner = (partnerId: number | null | undefined) => {
         return partnerId !== null && partnerId !== undefined
       }
       expect(hasPartner(null)).toBe(false)

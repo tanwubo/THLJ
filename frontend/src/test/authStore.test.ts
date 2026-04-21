@@ -80,10 +80,9 @@ describe('useAuthStore', () => {
     })
 
     it('should set loading true during login', async () => {
-      let loadingDuringLogin = false
       const { authAPI } = await import('../services/api')
       ;(authAPI.login as ReturnType<typeof vi.fn>).mockImplementation(async () => {
-        loadingDuringLogin = useAuthStore.getState().loading
+        expect(useAuthStore.getState().loading).toBe(true)
         await new Promise(r => setTimeout(r, 10))
         return { data: { token: 'token', user: {} } }
       })
