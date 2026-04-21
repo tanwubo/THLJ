@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Dialog, Input, Toast } from 'antd-mobile'
+import { Dialog, Input, Popup, Toast } from 'antd-mobile'
 import AppShell from '../../components/layout/AppShell'
+import ThemedCalendarPicker from '../../components/ThemedCalendarPicker'
 import BrandHeader from '../../components/layout/BrandHeader'
-import StatusPill from '../../components/ui/StatusPill'
-import SurfaceCard from '../../components/ui/SurfaceCard'
 import { DateField } from '../../components/DateField'
+import StatusPill, { statusLabelMap } from '../../components/ui/StatusPill'
+import SurfaceCard from '../../components/ui/SurfaceCard'
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { timelineAPI, TimelineNode } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
@@ -14,12 +15,21 @@ type NodeFormState = {
   name: string
   description: string
   deadline: string
+  status: TimelineNode['status']
 }
 
 const EMPTY_NODE_FORM: NodeFormState = {
   name: '',
   description: '',
   deadline: '',
+  status: 'pending',
+}
+
+const STATUS_OPTIONS: TimelineNode['status'][] = ['pending', 'in_progress', 'completed', 'cancelled']
+
+type InlineNameState = {
+  nodeId: number
+  value: string
 }
 
 export default function Timeline() {
@@ -31,6 +41,11 @@ export default function Timeline() {
   const [createForm, setCreateForm] = useState<NodeFormState>(EMPTY_NODE_FORM)
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<NodeFormState>(EMPTY_NODE_FORM)
+  const [inlineNameState, setInlineNameState] = useState<InlineNameState | null>(null)
+  const [statusMenuNodeId, setStatusMenuNodeId] = useState<number | null>(null)
+  const [actionsMenuNodeId, setActionsMenuNodeId] = useState<number | null>(null)
+  const [deadlinePickerNodeId, setDeadlinePickerNodeId] = useState<number | null>(null)
+  const [isMobileDeadlinePicker, setIsMobileDeadlinePicker] = useState(() => window.matchMedia('(max-width: 767px)').matches)
 
   const fetchTimeline = async () => {
     try {
@@ -47,13 +62,101 @@ export default function Timeline() {
     fetchTimeline()
   }, [])
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)')
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobileDeadlinePicker(event.matches)
+    }
+
+    setIsMobileDeadlinePicker(mediaQuery.matches)
+    mediaQuery.addEventListener('change', handleChange)
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
+
   useRealtimeRefresh(['node_update'], fetchTimeline, Boolean(partnerId))
+
+  useEffect(() => {
+    if (deadlinePickerNodeId === null || isMobileDeadlinePicker) {
+      return
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('[data-deadline-panel-root="true"]')) {
+        return
+      }
+      setDeadlinePickerNodeId(null)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [deadlinePickerNodeId, isMobileDeadlinePicker])
+
+  const buildUpdatePayload = (
+    node: TimelineNode,
+    overrides: Partial<Pick<TimelineNode, 'name' | 'description' | 'deadline' | 'status'>>,
+  ) => {
+    const name = (overrides.name ?? node.name).trim()
+    const description = overrides.description ?? node.description ?? ''
+    const deadline = overrides.deadline ?? node.deadline ?? ''
+    const status = overrides.status ?? node.status
+
+    return {
+      name,
+      description: description.trim() || undefined,
+      deadline: deadline || undefined,
+      status,
+    }
+  }
+
+  const persistNodeUpdate = async (
+    node: TimelineNode,
+    overrides: Partial<Pick<TimelineNode, 'name' | 'description' | 'deadline' | 'status'>>,
+    successMessage = '保存成功',
+  ) => {
+    const payload = buildUpdatePayload(node, overrides)
+
+    if (!payload.name) {
+      Toast.show('请输入节点名称')
+      return false
+    }
+
+    const unchanged =
+      payload.name === node.name &&
+      (payload.description ?? '') === (node.description ?? '') &&
+      (payload.deadline ?? '') === (node.deadline ?? '') &&
+      payload.status === node.status
+
+    if (unchanged) {
+      return true
+    }
+
+    try {
+      await timelineAPI.updateNode(node.id, payload)
+      emitRealtimeEvent('node_update', 'updated', { id: node.id })
+      Toast.show(successMessage)
+      await fetchTimeline()
+      return true
+    } catch (error: any) {
+      Toast.show(error.response?.data?.error || '保存失败')
+      return false
+    }
+  }
 
   const handleNodeClick = (nodeId: number) => {
     navigate(`/node/${nodeId}`)
   }
 
   const handleNodeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, nodeId: number) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       handleNodeClick(nodeId)
@@ -70,19 +173,81 @@ export default function Timeline() {
     setIsCreateModalOpen(false)
   }
 
-  const openEditModal = (node: TimelineNode, event: React.MouseEvent) => {
-    event.stopPropagation()
+  const openEditModal = (node: TimelineNode) => {
+    setInlineNameState(null)
+    closeInlinePanels()
     setEditingNodeId(node.id)
     setEditForm({
       name: node.name,
       description: node.description || '',
       deadline: node.deadline || '',
+      status: node.status,
     })
+    setActionsMenuNodeId(null)
   }
 
   const closeEditModal = () => {
     setEditingNodeId(null)
     setEditForm(EMPTY_NODE_FORM)
+  }
+
+  const closeInlinePanels = () => {
+    setStatusMenuNodeId(null)
+    setActionsMenuNodeId(null)
+    setDeadlinePickerNodeId(null)
+  }
+
+  const startInlineNameEdit = (node: TimelineNode, event: React.MouseEvent) => {
+    event.stopPropagation()
+    closeInlinePanels()
+    setInlineNameState({ nodeId: node.id, value: node.name })
+  }
+
+  const submitInlineNameEdit = async (node: TimelineNode) => {
+    if (!inlineNameState || inlineNameState.nodeId !== node.id) {
+      return
+    }
+
+    const nextName = inlineNameState.value.trim()
+    if (!nextName) {
+      Toast.show('请输入节点名称')
+      return
+    }
+
+    const saved = await persistNodeUpdate(node, { name: nextName })
+    if (saved) {
+      setInlineNameState(null)
+    }
+  }
+
+  const cancelInlineNameEdit = () => {
+    setInlineNameState(null)
+  }
+
+  const handleInlineDeadlineChange = async (value: string) => {
+    const activeNode = nodes.find((node) => node.id === deadlinePickerNodeId)
+    if (!activeNode) {
+      setDeadlinePickerNodeId(null)
+      return
+    }
+
+    const saved = await persistNodeUpdate(activeNode, { deadline: value })
+    if (saved) {
+      setDeadlinePickerNodeId(null)
+    }
+  }
+
+  const handleInlineDeadlineClear = async () => {
+    const activeNode = nodes.find((node) => node.id === deadlinePickerNodeId)
+    if (!activeNode) {
+      setDeadlinePickerNodeId(null)
+      return
+    }
+
+    const saved = await persistNodeUpdate(activeNode, { deadline: '' })
+    if (saved) {
+      setDeadlinePickerNodeId(null)
+    }
   }
 
   const handleCreateNode = async () => {
@@ -100,7 +265,7 @@ export default function Timeline() {
       emitRealtimeEvent('node_update', 'created')
       Toast.show('创建成功')
       closeCreateModal()
-      fetchTimeline()
+      await fetchTimeline()
     } catch (error: any) {
       Toast.show(error.response?.data?.error || '创建失败')
     }
@@ -110,51 +275,45 @@ export default function Timeline() {
     const editingNode = nodes.find((node) => node.id === editingNodeId)
     if (!editingNode) return
 
-    if (!editForm.name.trim()) {
-      Toast.show('请输入节点名称')
+    const saved = await persistNodeUpdate(editingNode, {
+      name: editForm.name,
+      description: editForm.description,
+      deadline: editForm.deadline,
+      status: editForm.status,
+    })
+
+    if (saved) {
+      closeEditModal()
+    }
+  }
+
+  const handleDeleteNode = async (nodeId: number) => {
+    const confirmed = await Dialog.confirm({
+        content: '确定要删除这个节点吗？关联的待办、费用等数据也会被删除',
+        confirmText: '删除',
+      })
+      .then(() => true)
+      .catch(() => false)
+
+    if (!confirmed) {
       return
     }
 
     try {
-      await timelineAPI.updateNode(editingNode.id, {
-        name: editForm.name.trim(),
-        description: editForm.description.trim() || undefined,
-        deadline: editForm.deadline || undefined,
-        status: editingNode.status,
-      })
-      emitRealtimeEvent('node_update', 'updated', { id: editingNode.id })
-      Toast.show('保存成功')
-      closeEditModal()
-      fetchTimeline()
-    } catch (error: any) {
-      Toast.show(error.response?.data?.error || '保存失败')
-    }
-  }
-
-  const handleDeleteNode = async (nodeId: number, event: React.MouseEvent) => {
-    event.stopPropagation()
-    try {
-      await Dialog.confirm({
-        content: '确定要删除这个节点吗？关联的待办、费用等数据也会被删除',
-        confirmText: '删除',
-      })
       await timelineAPI.deleteNode(nodeId)
       emitRealtimeEvent('node_update', 'deleted', { id: nodeId })
       Toast.show('删除成功')
-      fetchTimeline()
+      setActionsMenuNodeId(null)
+      await fetchTimeline()
     } catch (error: any) {
       Toast.show(error.response?.data?.error || '删除失败')
     }
   }
 
-  const handleStatusChange = async (node: TimelineNode, newStatus: string, event: React.MouseEvent) => {
-    event.stopPropagation()
-    try {
-      await timelineAPI.updateNode(node.id, { status: newStatus })
-      emitRealtimeEvent('node_update', 'status_changed', { id: node.id, status: newStatus })
-      fetchTimeline()
-    } catch (error: any) {
-      Toast.show(error.response?.data?.error || '状态更新失败')
+  const handleStatusChange = async (node: TimelineNode, status: TimelineNode['status']) => {
+    const saved = await persistNodeUpdate(node, { status }, '状态已更新')
+    if (saved) {
+      setStatusMenuNodeId(null)
     }
   }
 
@@ -164,6 +323,49 @@ export default function Timeline() {
   }
 
   const summaryTitle = partnerId ? `${user?.username ?? ''} · 双人筹备中` : `${user?.username ?? ''} · 单人筹备`
+  const deadlinePickerNode = nodes.find((node) => node.id === deadlinePickerNodeId) ?? null
+  const editDialogContent = (
+    <div className="timeline-node-dialog">
+      <div className="timeline-node-dialog__intro">
+        <p className="section-label">Complete Edit</p>
+        <p className="section-copy">在一个面板内调整节点名称、描述、状态与截止日期。</p>
+      </div>
+      <div className="timeline-node-dialog__fields">
+        <Input
+          placeholder="节点名称 *"
+          value={editForm.name}
+          onChange={(value) => setEditForm((current) => ({ ...current, name: value }))}
+        />
+        <textarea
+          value={editForm.description}
+          onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))}
+          placeholder="描述（可选）"
+          rows={3}
+          className="themed-textarea"
+        />
+        <DateField
+          label="截止日期"
+          value={editForm.deadline}
+          onChange={(value) => setEditForm((current) => ({ ...current, deadline: value }))}
+        />
+        <div className="timeline-node-dialog__status-group">
+          <span className="timeline-node-dialog__status-label">节点状态</span>
+          <div className="timeline-node-dialog__status-options">
+            {STATUS_OPTIONS.map((status) => (
+              <button
+                key={status}
+                type="button"
+                className={`timeline-node-dialog__status-option${editForm.status === status ? ' timeline-node-dialog__status-option--active' : ''}`}
+                onClick={() => setEditForm((current) => ({ ...current, status }))}
+              >
+                {statusLabelMap[status]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 
   if (loading) {
     return <div className="app-loading-screen">加载中...</div>
@@ -213,71 +415,181 @@ export default function Timeline() {
           </SurfaceCard>
         ) : (
           <div className="timeline-node-list">
-            {nodes.map((node) => (
-              <SurfaceCard key={node.id} className="timeline-node-card">
-                <div
-                  className="timeline-node-card__button"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleNodeClick(node.id)}
-                  onKeyDown={(event) => handleNodeKeyDown(event, node.id)}
-                >
-                  <div className="timeline-node-card__header">
-                    <div>
-                      <h3 className="timeline-node-card__title">{node.name}</h3>
-                      {node.description ? <p className="timeline-node-card__description">{node.description}</p> : null}
-                    </div>
-                    <StatusPill status={node.status} />
-                  </div>
+            {nodes.map((node) => {
+              const isEditingName = inlineNameState?.nodeId === node.id
+              const isStatusMenuOpen = statusMenuNodeId === node.id
+              const isActionsMenuOpen = actionsMenuNodeId === node.id
 
-                  <div className="timeline-progress">
-                    <div className="timeline-progress__meta">
-                      <span>进度</span>
-                      <span>{node.progress}%</span>
-                    </div>
-                    <div className="timeline-progress__track">
-                      <div className="timeline-progress__value" style={{ width: `${node.progress}%` }} />
-                    </div>
-                  </div>
+              return (
+                <SurfaceCard key={node.id} className="timeline-node-card">
+                  <div
+                    className="timeline-node-card__shell"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleNodeClick(node.id)}
+                    onKeyDown={(event) => handleNodeKeyDown(event, node.id)}
+                  >
+                    <div className="timeline-node-card__header">
+                      <div className="timeline-node-card__title-block">
+                        {isEditingName ? (
+                          <input
+                            aria-label="编辑节点名称"
+                            className="timeline-node-card__title-input timeline-inline-input"
+                            value={inlineNameState.value}
+                            autoFocus
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) =>
+                              setInlineNameState((current) =>
+                                current && current.nodeId === node.id ? { ...current, value: event.target.value } : current,
+                              )
+                            }
+                            onBlur={() => submitInlineNameEdit(node)}
+                            onKeyDown={(event) => {
+                              event.stopPropagation()
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                event.currentTarget.blur()
+                              }
+                              if (event.key === 'Escape') {
+                                event.preventDefault()
+                                cancelInlineNameEdit()
+                              }
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label="编辑节点名称"
+                            className="timeline-node-card__title-button timeline-interactive-zone"
+                            onClick={(event) => startInlineNameEdit(node, event)}
+                          >
+                            <span className="timeline-node-card__title">{node.name}</span>
+                          </button>
+                        )}
+                        {node.description ? (
+                          <p className="timeline-node-card__description" title={node.description}>
+                            {node.description}
+                          </p>
+                        ) : null}
+                      </div>
 
-                  <div className="timeline-node-card__footer">
-                    <div className="timeline-node-card__deadline">
-                      {node.deadline ? `截止：${node.deadline}` : '未设置截止日期'}
-                    </div>
-                    <div className="timeline-node-card__actions">
-                      <button type="button" className="brand-inline-button" onClick={(event) => openEditModal(node, event)}>
-                        编辑
-                      </button>
-                      <button
-                        type="button"
-                        className="brand-inline-button brand-inline-button--danger"
-                        onClick={(event) => handleDeleteNode(node.id, event)}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  </div>
+                      <div className="timeline-node-card__header-actions">
+                        <div className="timeline-node-card__menu-anchor">
+                          <button
+                            type="button"
+                            aria-label="编辑节点状态"
+                            className={`timeline-node-card__status-trigger timeline-interactive-zone${isStatusMenuOpen ? ' timeline-interactive-zone--active' : ''}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setActionsMenuNodeId(null)
+                              setStatusMenuNodeId((current) => (current === node.id ? null : node.id))
+                            }}
+                          >
+                            <StatusPill status={node.status} />
+                          </button>
 
-                  <div className="timeline-node-card__status-actions">
-                    {node.status === 'pending' ? (
-                      <button type="button" className="brand-secondary-button" onClick={(event) => handleStatusChange(node, 'in_progress', event)}>
-                        开始
-                      </button>
-                    ) : null}
-                    {node.status === 'in_progress' ? (
-                      <button type="button" className="brand-primary-button" onClick={(event) => handleStatusChange(node, 'completed', event)}>
-                        完成
-                      </button>
-                    ) : null}
-                    {(node.status === 'pending' || node.status === 'in_progress') ? (
-                      <button type="button" className="brand-secondary-button" onClick={(event) => handleStatusChange(node, 'cancelled', event)}>
-                        取消
-                      </button>
-                    ) : null}
+                          {isStatusMenuOpen ? (
+                            <div className="timeline-floating-menu timeline-floating-menu--status" onClick={(event) => event.stopPropagation()}>
+                              {STATUS_OPTIONS.map((status) => (
+                                <button
+                                  key={status}
+                                  type="button"
+                                  className={`timeline-floating-menu__item${status === node.status ? ' timeline-floating-menu__item--active' : ''}`}
+                                  onClick={() => handleStatusChange(node, status)}
+                                >
+                                  {statusLabelMap[status]}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="timeline-node-card__menu-anchor">
+                          <button
+                            type="button"
+                            aria-label="更多操作"
+                            className={`timeline-node-card__more-button timeline-interactive-zone${isActionsMenuOpen ? ' timeline-interactive-zone--active' : ''}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setStatusMenuNodeId(null)
+                              setActionsMenuNodeId((current) => (current === node.id ? null : node.id))
+                            }}
+                          >
+                            <span className="timeline-node-card__more-dots" aria-hidden="true">
+                              <span />
+                              <span />
+                              <span />
+                            </span>
+                          </button>
+
+                          {isActionsMenuOpen ? (
+                            <div className="timeline-floating-menu" role="menu" onClick={(event) => event.stopPropagation()}>
+                              <button type="button" className="timeline-floating-menu__item" onClick={() => openEditModal(node)}>
+                                完整编辑
+                              </button>
+                              <button
+                                type="button"
+                                className="timeline-floating-menu__item timeline-floating-menu__item--danger"
+                                onClick={() => handleDeleteNode(node.id)}
+                              >
+                                删除节点
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="timeline-progress">
+                      <div className="timeline-progress__meta">
+                        <span>进度</span>
+                        <span>{node.progress}%</span>
+                      </div>
+                      <div className="timeline-progress__track">
+                        <div className="timeline-progress__value" style={{ width: `${node.progress}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="timeline-node-card__footer">
+                      <div className="timeline-node-card__deadline-anchor" data-deadline-panel-root="true">
+                        <button
+                          type="button"
+                          aria-label="编辑节点时间"
+                          className="timeline-node-card__deadline timeline-interactive-zone"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setStatusMenuNodeId(null)
+                            setActionsMenuNodeId(null)
+                            setDeadlinePickerNodeId((current) => (current === node.id ? null : node.id))
+                          }}
+                        >
+                          {node.deadline ? `截止：${node.deadline}` : '未设置截止日期'}
+                        </button>
+
+                        {deadlinePickerNodeId === node.id && !isMobileDeadlinePicker ? (
+                          <div
+                            className="timeline-inline-panel timeline-inline-panel--desktop"
+                            data-testid="desktop-deadline-panel"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <div className="timeline-inline-panel__header">
+                              <p className="section-label">Deadline</p>
+                              <h3 className="section-title">调整节点时间</h3>
+                              <p className="section-copy">选择日期后立即保存，点击卡片外部关闭。</p>
+                            </div>
+                            <ThemedCalendarPicker
+                              value={node.deadline || ''}
+                              onSelect={handleInlineDeadlineChange}
+                              onClear={handleInlineDeadlineClear}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </SurfaceCard>
-            ))}
+                </SurfaceCard>
+              )
+            })}
 
             <button type="button" onClick={openCreateModal} className="brand-secondary-button">
               添加节点
@@ -286,28 +598,53 @@ export default function Timeline() {
         )}
       </div>
 
+      <Popup
+        visible={deadlinePickerNode !== null && isMobileDeadlinePicker}
+        onMaskClick={() => setDeadlinePickerNodeId(null)}
+        bodyStyle={{ borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
+      >
+        <div className="timeline-inline-panel">
+          <div className="timeline-inline-panel__header">
+            <p className="section-label">Deadline</p>
+            <h3 className="section-title">调整节点时间</h3>
+            <p className="section-copy">选择日期后立即保存，点击遮罩可关闭。</p>
+          </div>
+          <ThemedCalendarPicker
+            value={deadlinePickerNode?.deadline || ''}
+            onSelect={handleInlineDeadlineChange}
+            onClear={handleInlineDeadlineClear}
+          />
+        </div>
+      </Popup>
+
       <Dialog
         visible={isCreateModalOpen}
         title="创建节点"
         content={
-          <div className="space-y-3 pt-2">
-            <Input
-              placeholder="节点名称 *"
-              value={createForm.name}
-              onChange={(value) => setCreateForm((current) => ({ ...current, name: value }))}
-            />
-            <textarea
-              value={createForm.description}
-              onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
-              placeholder="描述（可选）"
-              rows={3}
-              className="themed-textarea"
-            />
-            <DateField
-              label="截止日期"
-              value={createForm.deadline}
-              onChange={(value) => setCreateForm((current) => ({ ...current, deadline: value }))}
-            />
+          <div className="timeline-node-dialog">
+            <div className="timeline-node-dialog__intro">
+              <p className="section-label">New Node</p>
+              <p className="section-copy">先定义名称、说明与时间，让时间线结构保持清晰。</p>
+            </div>
+            <div className="timeline-node-dialog__fields">
+              <Input
+                placeholder="节点名称 *"
+                value={createForm.name}
+                onChange={(value) => setCreateForm((current) => ({ ...current, name: value }))}
+              />
+              <textarea
+                value={createForm.description}
+                onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="描述（可选）"
+                rows={3}
+                className="themed-textarea"
+              />
+              <DateField
+                label="截止日期"
+                value={createForm.deadline}
+                onChange={(value) => setCreateForm((current) => ({ ...current, deadline: value }))}
+              />
+            </div>
           </div>
         }
         actions={[
@@ -329,29 +666,9 @@ export default function Timeline() {
       />
 
       <Dialog
-        visible={editingNodeId !== null}
+        visible={editingNodeId !== null && !isMobileDeadlinePicker}
         title="编辑节点"
-        content={
-          <div className="space-y-3 pt-2">
-            <Input
-              placeholder="节点名称 *"
-              value={editForm.name}
-              onChange={(value) => setEditForm((current) => ({ ...current, name: value }))}
-            />
-            <textarea
-              value={editForm.description}
-              onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))}
-              placeholder="描述（可选）"
-              rows={3}
-              className="themed-textarea"
-            />
-            <DateField
-              label="截止日期"
-              value={editForm.deadline}
-              onChange={(value) => setEditForm((current) => ({ ...current, deadline: value }))}
-            />
-          </div>
-        }
+        content={editDialogContent}
         actions={[
           [
             { key: 'cancel', text: '取消' },
@@ -369,6 +686,29 @@ export default function Timeline() {
         }}
         onClose={closeEditModal}
       />
+
+      <Popup
+        visible={editingNodeId !== null && isMobileDeadlinePicker}
+        onMaskClick={closeEditModal}
+        bodyStyle={{ borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
+      >
+        <div className="timeline-edit-drawer" data-testid="mobile-full-edit-drawer">
+          <div className="timeline-edit-drawer__header">
+            <h2 className="timeline-edit-drawer__title">编辑节点</h2>
+            <p className="section-label">Complete Edit</p>
+            <p className="section-copy">在一个面板内调整节点名称、描述、状态与截止日期。</p>
+          </div>
+          <div className="timeline-edit-drawer__body">{editDialogContent}</div>
+          <div className="timeline-edit-drawer__actions">
+            <button type="button" className="brand-secondary-button" onClick={closeEditModal}>
+              取消
+            </button>
+            <button type="button" className="brand-primary-button" onClick={handleSaveEdit}>
+              保存
+            </button>
+          </div>
+        </div>
+      </Popup>
     </AppShell>
   )
 }

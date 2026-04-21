@@ -1,4 +1,4 @@
-const labelMap = {
+export const statusLabelMap = {
   pending: '待处理',
   in_progress: '进行中',
   completed: '已完成',
@@ -6,9 +6,9 @@ const labelMap = {
 } as const
 
 type StatusPillProps = {
-  status: keyof typeof labelMap
+  status: keyof typeof statusLabelMap
 }
 
 export default function StatusPill({ status }: StatusPillProps) {
-  return <span className={`status-pill status-pill--${status}`}>{labelMap[status]}</span>
+  return <span className={`status-pill status-pill--${status}`}>{statusLabelMap[status]}</span>
 }
