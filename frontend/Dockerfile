@@ -1,4 +1,4 @@
-FROM node:18.20.4-alpine AS builder
+FROM node AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ COPY . .
 ARG VITE_API_BASE_URL=/api
 RUN npm run build
 
-FROM nginx:alpine
+FROM nginx
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf

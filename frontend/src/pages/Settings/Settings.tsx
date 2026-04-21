@@ -33,18 +33,25 @@ export default function Settings() {
       Toast.show('请输入邀请码')
       return
     }
-    setLoading(true)
-    try {
-      await authAPI.bindPartner({ inviteCode: inviteCode.trim() })
-      Toast.show('绑定成功')
-      setShowBind(false)
-      setInviteCode('')
-      await loadProfile()
-    } catch (error: any) {
-      Toast.show(error.response?.data?.error || '绑定失败')
-    } finally {
-      setLoading(false)
-    }
+
+    Dialog.confirm({
+      content: '绑定后将同步并使用对方的数据，您当前的数据将被覆盖替换。确定要绑定吗？',
+      confirmText: '确定绑定',
+      onConfirm: async () => {
+        setLoading(true)
+        try {
+          await authAPI.bindPartner({ inviteCode: inviteCode.trim() })
+          Toast.show('绑定成功')
+          setShowBind(false)
+          setInviteCode('')
+          await loadProfile()
+        } catch (error: any) {
+          Toast.show(error.response?.data?.error || '绑定失败')
+        } finally {
+          setLoading(false)
+        }
+      },
+    })
   }
 
   const handleUnbindPartner = () => {
