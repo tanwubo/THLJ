@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Dialog, Popup, Toast } from 'antd-mobile'
 import AppShell from '../../components/layout/AppShell'
@@ -10,7 +10,7 @@ import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { timelineAPI, TimelineNode, TimelineTemplate, timelineTemplateAPI } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import NodeEditorModal from './NodeEditorModal'
-import TimelineTemplatePicker from './TimelineTemplatePicker'
+import TimelineTemplatePicker, { type TimelineTemplatePickerProps, type TimelineTemplatePickerView } from './TimelineTemplatePicker'
 
 type NodeFormState = {
   name: string
@@ -48,10 +48,13 @@ export default function Timeline() {
   const [deadlinePickerNodeId, setDeadlinePickerNodeId] = useState<number | null>(null)
   const [isMobileDeadlinePicker, setIsMobileDeadlinePicker] = useState(() => window.matchMedia('(max-width: 767px)').matches)
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false)
+  const [templatePickerView, setTemplatePickerView] = useState<TimelineTemplatePickerView>('list')
   const [templates, setTemplates] = useState<TimelineTemplate[]>([])
   const [templateLoading, setTemplateLoading] = useState(false)
+  const [templateDetailLoading, setTemplateDetailLoading] = useState(false)
   const [templateSubmitting, setTemplateSubmitting] = useState(false)
   const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null)
+  const templatePickerRequestId = useRef(0)
 
   const fetchTimeline = async () => {
     try {
@@ -337,32 +340,83 @@ export default function Timeline() {
     )
   }
 
+  const invalidateTemplatePickerRequests = () => {
+    templatePickerRequestId.current += 1
+    return templatePickerRequestId.current
+  }
+
+  const resetTemplatePickerState = () => {
+    setTemplatePickerView('list')
+    setActiveTemplateId(null)
+    setTemplates([])
+    setTemplateLoading(false)
+    setTemplateDetailLoading(false)
+    setTemplateSubmitting(false)
+  }
+
+  const closeTemplatePicker = () => {
+    invalidateTemplatePickerRequests()
+    resetTemplatePickerState()
+    setIsTemplatePickerOpen(false)
+  }
+
+  const returnToTemplateList = () => {
+    invalidateTemplatePickerRequests()
+    setTemplatePickerView('list')
+    setTemplateDetailLoading(false)
+  }
+
   const openTemplatePicker = async () => {
+    const requestId = invalidateTemplatePickerRequests()
+    resetTemplatePickerState()
     setTemplateLoading(true)
     setIsTemplatePickerOpen(true)
 
     try {
       const response = await timelineTemplateAPI.listTemplates()
+      if (templatePickerRequestId.current !== requestId) {
+        return
+      }
       const nextTemplates = response.data.templates || []
       setTemplates(nextTemplates)
-
-      const firstTemplateId = nextTemplates[0]?.id ?? null
-      setActiveTemplateId(firstTemplateId)
-
-      if (firstTemplateId) {
-        await loadTemplateDetail(firstTemplateId)
-      }
+      setActiveTemplateId(nextTemplates[0]?.id ?? null)
     } catch (error) {
+      if (templatePickerRequestId.current !== requestId) {
+        return
+      }
       console.error('获取模板失败:', error)
       Toast.show('获取模板失败')
     } finally {
-      setTemplateLoading(false)
+      if (templatePickerRequestId.current === requestId) {
+        setTemplateLoading(false)
+      }
     }
   }
 
   const handleSelectTemplate = async (templateId: number) => {
+    const requestId = invalidateTemplatePickerRequests()
+    const previousTemplateId = activeTemplateId
     setActiveTemplateId(templateId)
-    await loadTemplateDetail(templateId)
+    setTemplateDetailLoading(true)
+
+    try {
+      await loadTemplateDetail(templateId)
+      if (templatePickerRequestId.current !== requestId) {
+        return
+      }
+      setTemplatePickerView('detail')
+    } catch (error: any) {
+      if (templatePickerRequestId.current !== requestId) {
+        return
+      }
+      setActiveTemplateId(previousTemplateId)
+      setTemplatePickerView('list')
+      Toast.show(error.response?.data?.error || '获取模板失败')
+    } finally {
+      if (templatePickerRequestId.current === requestId) {
+        setTemplateDetailLoading(false)
+      }
+    }
   }
 
   const handleApplyTemplate = async () => {
@@ -375,7 +429,7 @@ export default function Timeline() {
     try {
       await timelineTemplateAPI.applyTemplate(activeTemplateId)
       Toast.show('模板已应用')
-      setIsTemplatePickerOpen(false)
+      closeTemplatePicker()
       await fetchTimeline()
     } catch (error: any) {
       Toast.show(error.response?.data?.error || '应用模板失败')
@@ -679,14 +733,19 @@ export default function Timeline() {
       />
 
       <TimelineTemplatePicker
-        visible={isTemplatePickerOpen}
-        templates={templates}
-        activeTemplateId={activeTemplateId}
-        loading={templateLoading}
-        submitting={templateSubmitting}
-        onSelect={handleSelectTemplate}
-        onClose={() => setIsTemplatePickerOpen(false)}
-        onApply={handleApplyTemplate}
+        {...({
+          visible: isTemplatePickerOpen,
+          templates,
+          activeTemplateId,
+          loading: templateLoading,
+          detailLoading: templateDetailLoading,
+          view: templatePickerView,
+          submitting: templateSubmitting,
+          onSelect: handleSelectTemplate,
+          onClose: closeTemplatePicker,
+          onBack: returnToTemplateList,
+          onApply: handleApplyTemplate,
+        } satisfies TimelineTemplatePickerProps)}
       />
     </AppShell>
   )

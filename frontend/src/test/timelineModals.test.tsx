@@ -130,6 +130,158 @@ describe('Timeline modal flows', () => {
     expect(screen.getByRole('button', { name: '创建第一个节点' })).toBeInTheDocument()
   })
 
+  it('opens the template picker in list-first mode from an empty timeline', async () => {
+    getTimelineMock.mockResolvedValue({
+      data: { nodes: [], overallProgress: 0 },
+    } as unknown as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+
+    renderTimeline()
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择模板' }))
+
+    expect(await screen.findByText('选择一套初始时间线')).toBeInTheDocument()
+    expect(screen.getByText('标准婚礼时间线')).toBeInTheDocument()
+    expect(screen.getByText('默认婚礼阶段模板')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /标准婚礼时间线/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: '使用此模板' })).toBeNull()
+  })
+
+  it('navigates from the template list into a detail view and back again', async () => {
+    getTimelineMock.mockResolvedValue({
+      data: { nodes: [], overallProgress: 0 },
+    } as unknown as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+
+    renderTimeline()
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择模板' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: /标准婚礼时间线/ }))
+
+    expect(await screen.findByRole('button', { name: '使用此模板' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+
+    expect(await screen.findByText('选择一套初始时间线')).toBeInTheDocument()
+    expect(screen.getByText('标准婚礼时间线')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '使用此模板' })).toBeNull()
+  })
+
+  it('restores the previous template selection when detail loading fails', async () => {
+    getTimelineMock.mockResolvedValue({
+      data: { nodes: [], overallProgress: 0 },
+    } as unknown as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+    listTemplatesMock.mockResolvedValue({
+      data: {
+        templates: [
+          { id: 1, name: '标准婚礼时间线', description: '默认婚礼阶段模板', nodeCount: 2 },
+          { id: 2, name: '精简婚礼时间线', description: '更轻量的预置结构', nodeCount: 1 },
+        ],
+      },
+    } as Awaited<ReturnType<typeof timelineTemplateAPI.listTemplates>>)
+    getTemplateMock
+      .mockResolvedValueOnce({
+        data: {
+          id: 1,
+          name: '标准婚礼时间线',
+          description: '默认婚礼阶段模板',
+          nodes: [
+            { id: 11, templateId: 1, name: '确定结婚意向', description: '先明确双方意愿', order: 1 },
+          ],
+        },
+      } as Awaited<ReturnType<typeof timelineTemplateAPI.getTemplate>>)
+      .mockRejectedValueOnce({ response: { data: { error: '模板详情加载失败' } } })
+
+    renderTimeline()
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择模板' }))
+    fireEvent.click(await screen.findByRole('button', { name: /标准婚礼时间线/ }))
+    fireEvent.click(await screen.findByRole('button', { name: '返回' }))
+    fireEvent.click(await screen.findByRole('button', { name: /精简婚礼时间线/ }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /标准婚礼时间线/ })).toHaveAttribute('aria-pressed', 'true')
+    })
+    expect(screen.getByRole('button', { name: /精简婚礼时间线/ })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('shows the softened placeholder when a template node has no description', async () => {
+    getTimelineMock.mockResolvedValue({
+      data: { nodes: [], overallProgress: 0 },
+    } as unknown as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+    getTemplateMock.mockImplementation(async () =>
+      ({
+        data: {
+          id: 1,
+          name: '标准婚礼时间线',
+          description: '默认婚礼阶段模板',
+          nodes: [
+            { id: 11, templateId: 1, name: '确定结婚意向', description: '', order: 1 },
+            { id: 12, templateId: 1, name: '双方父母见面', description: '安排正式见面沟通', order: 2 },
+          ],
+        },
+      }) as Awaited<ReturnType<typeof timelineTemplateAPI.getTemplate>>,
+    )
+
+    renderTimeline()
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择模板' }))
+    fireEvent.click(await screen.findByRole('button', { name: /标准婚礼时间线/ }))
+
+    expect(await screen.findByText('暂未配置预置说明')).toBeInTheDocument()
+    expect(screen.queryByText('无预置说明')).toBeNull()
+  })
+
+  it('uses the detail header fallback when template description is blank', async () => {
+    getTimelineMock.mockResolvedValue({
+      data: { nodes: [], overallProgress: 0 },
+    } as unknown as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+    getTemplateMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        name: '标准婚礼时间线',
+        description: '',
+        nodes: [
+          { id: 11, templateId: 1, name: '确定结婚意向', description: '先明确双方意愿', order: 1 },
+        ],
+      },
+    } as Awaited<ReturnType<typeof timelineTemplateAPI.getTemplate>>)
+
+    renderTimeline()
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择模板' }))
+    fireEvent.click(await screen.findByRole('button', { name: /标准婚礼时间线/ }))
+
+    await screen.findByRole('button', { name: '返回' })
+    expect(screen.getAllByText('查看预置步骤后，再决定是否直接应用。')).not.toHaveLength(0)
+  })
+
+  it('shows the loaded detail step count instead of the list payload count in detail mode', async () => {
+    getTimelineMock.mockResolvedValue({
+      data: { nodes: [], overallProgress: 0 },
+    } as unknown as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+    listTemplatesMock.mockResolvedValueOnce({
+      data: {
+        templates: [{ id: 1, name: '标准婚礼时间线', description: '默认婚礼阶段模板', nodeCount: 4 }],
+      },
+    } as Awaited<ReturnType<typeof timelineTemplateAPI.listTemplates>>)
+    getTemplateMock.mockResolvedValueOnce({
+      data: {
+        id: 1,
+        name: '标准婚礼时间线',
+        description: '默认婚礼阶段模板',
+        nodes: [{ id: 11, templateId: 1, name: '确定结婚意向', description: '先明确双方意愿', order: 1 }],
+      },
+    } as Awaited<ReturnType<typeof timelineTemplateAPI.getTemplate>>)
+
+    renderTimeline()
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择模板' }))
+    fireEvent.click(await screen.findByRole('button', { name: /标准婚礼时间线/ }))
+
+    expect(await screen.findByText('1 个步骤')).toBeInTheDocument()
+    expect(screen.queryByText('4 个步骤')).toBeNull()
+  })
+
   it('hides the template entry once timeline nodes exist', async () => {
     renderTimeline()
 
@@ -164,6 +316,7 @@ describe('Timeline modal flows', () => {
     renderTimeline()
 
     fireEvent.click(await screen.findByRole('button', { name: '选择模板' }))
+    fireEvent.click(await screen.findByRole('button', { name: /标准婚礼时间线/ }))
     fireEvent.click(await screen.findByRole('button', { name: '使用此模板' }))
 
     await waitFor(() => {
