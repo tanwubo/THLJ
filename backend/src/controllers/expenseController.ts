@@ -8,6 +8,51 @@ export const EXPENSE_CATEGORIES = {
   expense: ['婚宴', '婚庆', '婚车', '婚纱摄影', '三金/五金', '酒店预订', '婚车车队', '蜜月旅行', '其他支出']
 };
 
+function parseExpenseType(input: unknown): { value?: 'income' | 'expense'; error?: string } {
+  if (input !== 'income' && input !== 'expense') {
+    return { error: 'type 必须是 income 或 expense' };
+  }
+
+  return { value: input };
+}
+
+function parseExpenseAmount(input: unknown): { value?: number; error?: string } {
+  if (input === undefined || input === null || input === '') {
+    return { error: 'amount 必须是大于 0 的数字' };
+  }
+
+  let value: number;
+  if (typeof input === 'number') {
+    value = input;
+  } else if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed || !/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
+      return { error: 'amount 必须是大于 0 的数字' };
+    }
+    value = Number(trimmed);
+  } else {
+    return { error: 'amount 必须是大于 0 的数字' };
+  }
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return { error: 'amount 必须是大于 0 的数字' };
+  }
+
+  return { value };
+}
+
+function parseExpenseCategory(input: unknown, type: 'income' | 'expense'): { value?: string; error?: string } {
+  if (input === undefined) {
+    return { value: type === 'income' ? '其他收入' : '其他支出' };
+  }
+
+  if (typeof input !== 'string' || !input.trim()) {
+    return { error: 'category 不能为空' };
+  }
+
+  return { value: input.trim() };
+}
+
 function parseTodoId(input: unknown): { todoId?: number; error?: string } {
   if (input === undefined || input === null || input === '') {
     return { error: 'todoId 为必填项' };
@@ -73,8 +118,19 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: todoCheck.error });
     }
 
-    if (!type || !amount || !category) {
-      return res.status(400).json({ error: 'type, amount, category are required' });
+    const typeCheck = parseExpenseType(type);
+    if (typeCheck.error) {
+      return res.status(400).json({ error: typeCheck.error });
+    }
+
+    const amountCheck = parseExpenseAmount(amount);
+    if (amountCheck.error) {
+      return res.status(400).json({ error: amountCheck.error });
+    }
+
+    const categoryCheck = parseExpenseCategory(category, typeCheck.value);
+    if (categoryCheck.error) {
+      return res.status(400).json({ error: categoryCheck.error });
     }
 
     const todo = query(
@@ -87,7 +143,7 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
 
     const result = await run(
       'INSERT INTO expense_records (node_id, todo_id, user_id, type, amount, category, description) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [todo[0].node_id, todo[0].id, userId, type, amount, category, description || null]
+      [todo[0].node_id, todo[0].id, userId, typeCheck.value, amountCheck.value, categoryCheck.value, description || null]
     );
 
     const expense = query('SELECT * FROM expense_records WHERE id = ?', [result.lastInsertRowid]);
@@ -113,9 +169,30 @@ export const updateExpense = async (req: AuthRequest, res: Response) => {
     const updates: string[] = [];
     const values: any[] = [];
 
-    if (type !== undefined) { updates.push('type = ?'); values.push(type); }
-    if (amount !== undefined) { updates.push('amount = ?'); values.push(amount); }
-    if (category !== undefined) { updates.push('category = ?'); values.push(category); }
+    if (type !== undefined) {
+      const typeCheck = parseExpenseType(type);
+      if (typeCheck.error) {
+        return res.status(400).json({ error: typeCheck.error });
+      }
+      updates.push('type = ?');
+      values.push(typeCheck.value);
+    }
+    if (amount !== undefined) {
+      const amountCheck = parseExpenseAmount(amount);
+      if (amountCheck.error) {
+        return res.status(400).json({ error: amountCheck.error });
+      }
+      updates.push('amount = ?');
+      values.push(amountCheck.value);
+    }
+    if (category !== undefined) {
+      const categoryCheck = parseExpenseCategory(category, (type as 'income' | 'expense') || expense[0].type);
+      if (categoryCheck.error) {
+        return res.status(400).json({ error: categoryCheck.error });
+      }
+      updates.push('category = ?');
+      values.push(categoryCheck.value);
+    }
     if (description !== undefined) { updates.push('description = ?'); values.push(description); }
 
     if (updates.length > 0) {

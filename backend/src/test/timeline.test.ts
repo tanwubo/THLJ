@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getNodeWorkbench, getTimeline } from '../controllers/timelineController'
+import { createNode, getNodeWorkbench, getTimeline, updateNode } from '../controllers/timelineController'
 import { deleteTodo } from '../controllers/todoController'
 
 // Mock the db module
@@ -117,7 +117,7 @@ describe('Timeline Controller Logic', () => {
       const runMock = run as unknown as ReturnType<typeof vi.fn>
 
       queryMock.mockImplementation((sql: string) => {
-        if (sql === 'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC') {
+        if (sql === 'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, "order" ASC') {
           return []
         }
 
@@ -131,6 +131,198 @@ describe('Timeline Controller Logic', () => {
 
       expect(json).toHaveBeenCalledWith({ nodes: [], overallProgress: 0 })
       expect(runMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('timeline node persistence', () => {
+    it('creates nodes with budget and treats empty budget as 0', async () => {
+      const queryMock = query as unknown as ReturnType<typeof vi.fn>
+      const runMock = run as unknown as ReturnType<typeof vi.fn>
+
+      queryMock.mockImplementation((sql: string, params: any[] = []) => {
+        if (sql === 'SELECT MAX("order") as max FROM timeline_nodes WHERE user_id = ?') {
+          expect(params).toEqual([1])
+          return [{ max: 2 }]
+        }
+        if (sql === 'SELECT * FROM timeline_nodes WHERE id = ?') {
+          expect(params).toEqual([11])
+          return [{ id: 11, name: '婚礼筹备', budget: 0 }]
+        }
+        return []
+      })
+      runMock.mockResolvedValue({ lastInsertRowid: 11, changes: 1 })
+
+      const json = vi.fn()
+      const res = { json, status: vi.fn().mockReturnValue({ json }) } as any
+
+      await createNode({
+        body: { name: '婚礼筹备', description: '筹备预算', deadline: '2026-05-01', budget: '' },
+        user: { id: 1, dataOwnerId: 1 },
+      } as any, res)
+
+      expect(runMock).toHaveBeenCalledWith(
+        'INSERT INTO timeline_nodes (user_id, name, description, deadline, budget, "order", status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [1, '婚礼筹备', '筹备预算', '2026-05-01', 0, 3, 'pending']
+      )
+      expect(json).toHaveBeenCalledWith({ id: 11, name: '婚礼筹备', budget: 0 })
+    })
+
+    it.each([
+      ['negative string', '-1'],
+      ['boolean true', true],
+      ['boolean false', false],
+      ['array', []],
+    ])('rejects invalid node budget values: %s', async (_label, budget) => {
+      const queryMock = query as unknown as ReturnType<typeof vi.fn>
+      const runMock = run as unknown as ReturnType<typeof vi.fn>
+
+      const json = vi.fn()
+      const status = vi.fn().mockReturnValue({ json })
+      const res = { json, status } as any
+
+      await createNode({
+        body: { name: '婚礼筹备', budget },
+        user: { id: 1, dataOwnerId: 1 },
+      } as any, res)
+
+      expect(status).toHaveBeenCalledWith(400)
+      expect(json).toHaveBeenCalledWith({ error: '预算必须是大于等于 0 的数字' })
+      expect(queryMock).not.toHaveBeenCalled()
+      expect(runMock).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['null', null],
+      ['number', 123],
+      ['object', { text: '婚礼筹备' }],
+      ['blank string', '   '],
+    ])('rejects invalid create node name payloads: %s', async (_label, name) => {
+      const queryMock = query as unknown as ReturnType<typeof vi.fn>
+      const runMock = run as unknown as ReturnType<typeof vi.fn>
+
+      const json = vi.fn()
+      const status = vi.fn().mockReturnValue({ json })
+      const res = { json, status } as any
+
+      await createNode({
+        body: { name, budget: 1000 },
+        user: { id: 1, dataOwnerId: 1 },
+      } as any, res)
+
+      expect(status).toHaveBeenCalledWith(400)
+      expect(json).toHaveBeenCalledWith({ error: '节点名称不能为空' })
+      expect(queryMock).not.toHaveBeenCalled()
+      expect(runMock).not.toHaveBeenCalled()
+    })
+
+    it('updates node budget', async () => {
+      const queryMock = query as unknown as ReturnType<typeof vi.fn>
+      const runMock = run as unknown as ReturnType<typeof vi.fn>
+
+      queryMock.mockImplementation((sql: string, params: any[] = []) => {
+        if (sql === 'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?') {
+          expect(params).toEqual(['5', 1])
+          return [{ id: 5, user_id: 1 }]
+        }
+        if (sql === 'SELECT * FROM timeline_nodes WHERE id = ?') {
+          expect(params).toEqual(['5'])
+          return [{ id: 5, budget: 9000 }]
+        }
+        return []
+      })
+      runMock.mockResolvedValue({ changes: 1 })
+
+      const json = vi.fn()
+      const res = { json, status: vi.fn().mockReturnValue({ json }) } as any
+
+      await updateNode({
+        params: { id: '5' },
+        body: { budget: 9000 },
+        user: { id: 1, dataOwnerId: 1 },
+      } as any, res)
+
+      expect(runMock).toHaveBeenCalledWith(
+        'UPDATE timeline_nodes SET budget = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
+        [9000, '5', 1]
+      )
+      expect(json).toHaveBeenCalledWith({ id: 5, budget: 9000 })
+    })
+
+    it.each([
+      ['null', null],
+      ['number', 123],
+      ['object', { text: '婚礼筹备' }],
+      ['blank string', '   '],
+    ])('rejects invalid update node name payloads: %s', async (_label, name) => {
+      const queryMock = query as unknown as ReturnType<typeof vi.fn>
+      const runMock = run as unknown as ReturnType<typeof vi.fn>
+
+      queryMock.mockImplementation((sql: string, params: any[] = []) => {
+        if (sql === 'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?') {
+          expect(params).toEqual(['5', 1])
+          return [{ id: 5, user_id: 1 }]
+        }
+        return []
+      })
+
+      const json = vi.fn()
+      const status = vi.fn().mockReturnValue({ json })
+      const res = { json, status } as any
+
+      await updateNode({
+        params: { id: '5' },
+        body: { name },
+        user: { id: 1, dataOwnerId: 1 },
+      } as any, res)
+
+      expect(status).toHaveBeenCalledWith(400)
+      expect(json).toHaveBeenCalledWith({ error: '节点名称不能为空' })
+      expect(runMock).not.toHaveBeenCalled()
+    })
+
+    it('returns node budgets in the timeline payload', async () => {
+      const queryMock = query as unknown as ReturnType<typeof vi.fn>
+      queryMock.mockImplementation((sql: string) => {
+        if (sql === 'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, "order" ASC') {
+          return [{ id: 1, budget: 12000, order: 1 }]
+        }
+        if (sql === 'SELECT * FROM todo_items WHERE node_id = ?') {
+          return []
+        }
+        return []
+      })
+
+      const json = vi.fn()
+      const res = { json, status: vi.fn().mockReturnValue({ json }) } as any
+
+      await getTimeline({ user: { id: 1, dataOwnerId: 1 } } as any, res)
+
+      expect(json).toHaveBeenCalledWith({
+        nodes: [{ id: 1, budget: 12000, order: 1, progress: 0, todos: [] }],
+        overallProgress: 0,
+      })
+    })
+  })
+
+  describe('timeline ordering', () => {
+    it('sorts nodes by deadline first, no deadline last, and order as tiebreaker', async () => {
+      const queryMock = query as unknown as ReturnType<typeof vi.fn>
+      queryMock.mockImplementation((sql: string) => {
+        if (sql === 'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, "order" ASC') {
+          return []
+        }
+        return []
+      })
+
+      const json = vi.fn()
+      const res = { json, status: vi.fn().mockReturnValue({ json }) } as any
+
+      await getTimeline({ user: { id: 1, dataOwnerId: 1 } } as any, res)
+
+      expect(queryMock).toHaveBeenCalledWith(
+        'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, "order" ASC',
+        [1]
+      )
     })
   })
 })
@@ -195,20 +387,32 @@ describe('Workbench aggregation', () => {
     todoRows,
     expenseRows = [],
     attachmentRows = [],
+    legacyExpenseRows = [],
+    legacyAttachmentRows = [],
     memoRows = [],
   }: {
     nodeRows: any[]
     todoRows: any[]
     expenseRows?: any[]
     attachmentRows?: any[]
+    legacyExpenseRows?: any[]
+    legacyAttachmentRows?: any[]
     memoRows?: any[]
   }) {
     queryMock.mockImplementation((sql: string, params: any[] = []) => {
       if (sql === 'SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?') {
         return nodeRows
       }
-      if (sql === 'SELECT * FROM todo_items WHERE node_id = ? ORDER BY created_at DESC') {
+      if (sql === 'SELECT * FROM todo_items WHERE node_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, created_at DESC') {
         return todoRows
+      }
+      if (sql === 'SELECT * FROM expense_records WHERE node_id = ? AND todo_id IS NULL ORDER BY created_at DESC') {
+        expect(params).toEqual(['1'])
+        return legacyExpenseRows
+      }
+      if (sql === 'SELECT * FROM attachments WHERE node_id = ? AND todo_id IS NULL ORDER BY created_at DESC') {
+        expect(params).toEqual(['1'])
+        return legacyAttachmentRows
       }
       if (sql.startsWith('SELECT * FROM expense_records WHERE todo_id IN (')) {
         expect(params).toEqual(todoRows.map(todo => todo.id))
@@ -246,6 +450,24 @@ describe('Workbench aggregation', () => {
     expect(json).toHaveBeenCalledWith({ error: '节点不存在' })
   })
 
+  it('sorts workbench todos by deadline first and created_at descending as tiebreaker', async () => {
+    resetQueryMock()
+    mockWorkbenchQueries({
+      nodeRows: [{ id: 1, name: '确定结婚意向', status: 'pending' }],
+      todoRows: [],
+    })
+
+    const { res } = createResponse()
+    const req = { params: { id: '1' }, user: { id: 99 } } as any
+
+    await getNodeWorkbench(req, res)
+
+    expect(queryMock).toHaveBeenCalledWith(
+      'SELECT * FROM todo_items WHERE node_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, created_at DESC',
+      ['1']
+    )
+  })
+
   it('returns an empty workbench when the node has no todos or memo', async () => {
     resetQueryMock()
     mockWorkbenchQueries({
@@ -264,8 +486,33 @@ describe('Workbench aggregation', () => {
     expect(payload.node).toEqual({ id: 1, name: '确定结婚意向', status: 'pending' })
     expect(payload.todos).toEqual([])
     expect(payload.memo).toBeNull()
-    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes('expense_records'))).toBe(false)
-    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes('attachments'))).toBe(false)
+    expect(queryMock).toHaveBeenCalledWith(
+      'SELECT * FROM expense_records WHERE node_id = ? AND todo_id IS NULL ORDER BY created_at DESC',
+      ['1']
+    )
+    expect(queryMock).toHaveBeenCalledWith(
+      'SELECT * FROM attachments WHERE node_id = ? AND todo_id IS NULL ORDER BY created_at DESC',
+      ['1']
+    )
+  })
+
+  it('includes legacy node-level expenses and attachments in the workbench response', async () => {
+    resetQueryMock()
+    mockWorkbenchQueries({
+      nodeRows: [{ id: 1, name: '确定结婚意向', status: 'pending' }],
+      todoRows: [{ id: 11, node_id: 1, content: '沟通彩礼金额' }],
+      legacyExpenseRows: [{ id: 51, node_id: 1, todo_id: null, amount: 999 }],
+      legacyAttachmentRows: [{ id: 61, node_id: 1, todo_id: null, file_name: 'legacy.pdf' }],
+    })
+
+    const { json, res } = createResponse()
+    const req = { params: { id: '1' }, user: { id: 99 } } as any
+
+    await getNodeWorkbench(req, res)
+
+    const payload = json.mock.calls[0][0]
+    expect(payload.node.expenses).toEqual([{ id: 51, node_id: 1, todo_id: null, amount: 999 }])
+    expect(payload.node.attachments).toEqual([{ id: 61, node_id: 1, todo_id: null, file_name: 'legacy.pdf' }])
   })
 
   it('returns grouped todos and uses the todo_id IN (...) path for child records', async () => {
@@ -303,7 +550,7 @@ describe('Workbench aggregation', () => {
     )
     expect(queryMock).toHaveBeenNthCalledWith(
       2,
-      'SELECT * FROM todo_items WHERE node_id = ? ORDER BY created_at DESC',
+      'SELECT * FROM todo_items WHERE node_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, created_at DESC',
       ['1']
     )
     expect(expenseQuery?.[1]).toEqual([11, 12])
@@ -316,6 +563,8 @@ describe('Workbench aggregation', () => {
     expect(payload.todos[1].expenses).toEqual([{ id: 22, todo_id: 12, amount: 3000 }])
     expect(payload.todos[1].attachments).toEqual([{ id: 32, todo_id: 12, file_name: '日期表.xlsx' }])
     expect(payload.memo).toEqual({ id: 41, node_id: 1, content: 'memo' })
+    expect(payload.node.expenses).toBeUndefined()
+    expect(payload.node.attachments).toBeUndefined()
   })
 })
 

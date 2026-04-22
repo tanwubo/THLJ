@@ -2,7 +2,7 @@ import initSqlJs from 'sql.js'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fs from 'fs/promises'
 import { applyWorkbenchSchema } from '../db/init'
-import { createExpense } from '../controllers/expenseController'
+import { createExpense, updateExpense } from '../controllers/expenseController'
 import { uploadAttachment } from '../controllers/attachmentController'
 
 vi.mock('../db', () => ({
@@ -57,6 +57,7 @@ describe('workbench schema contract', () => {
       exec: sql => db.exec(sql),
       run: sql => db.run(sql),
     })
+    const firstTimelineColumns = db.exec('PRAGMA table_info(timeline_nodes)')[0]?.values.map((row: any[]) => row[1]) ?? []
     const firstExpenseColumns = db.exec('PRAGMA table_info(expense_records)')[0]?.values.map((row: any[]) => row[1]) ?? []
     const firstAttachmentColumns = db.exec('PRAGMA table_info(attachments)')[0]?.values.map((row: any[]) => row[1]) ?? []
     const firstExpenseIndexes = db.exec('PRAGMA index_list(expense_records)')[0]?.values.map((row: any[]) => row[1]) ?? []
@@ -67,13 +68,16 @@ describe('workbench schema contract', () => {
       run: sql => db.run(sql),
     })
 
+    const timelineColumns = db.exec('PRAGMA table_info(timeline_nodes)')[0]?.values.map((row: any[]) => row[1]) ?? []
     const expenseColumns = db.exec('PRAGMA table_info(expense_records)')[0]?.values.map((row: any[]) => row[1]) ?? []
     const attachmentColumns = db.exec('PRAGMA table_info(attachments)')[0]?.values.map((row: any[]) => row[1]) ?? []
     const expenseIndexes = db.exec('PRAGMA index_list(expense_records)')[0]?.values.map((row: any[]) => row[1]) ?? []
     const attachmentIndexes = db.exec('PRAGMA index_list(attachments)')[0]?.values.map((row: any[]) => row[1]) ?? []
 
+    expect(timelineColumns).toEqual(firstTimelineColumns)
     expect(expenseColumns).toEqual(firstExpenseColumns)
     expect(attachmentColumns).toEqual(firstAttachmentColumns)
+    expect(timelineColumns).toContain('budget')
     expect(expenseIndexes).toEqual(firstExpenseIndexes)
     expect(attachmentIndexes).toEqual(firstAttachmentIndexes)
     expect(expenseColumns).toContain('todo_id')
@@ -176,6 +180,110 @@ describe('Workbench validation', () => {
       [1, 7, 99, 'expense', 100, '婚宴', '订金']
     )
     expect(json).toHaveBeenCalledWith({ id: 101, todo_id: 7 })
+  })
+
+  it('defaults expense category from type when category is omitted', async () => {
+    queryMock.mockImplementation((sql: string, params: any[] = []) => {
+      if (sql === 'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?') {
+        expect(params).toEqual([7, 99])
+        return [{ id: 7, node_id: 1 }]
+      }
+      if (sql === 'SELECT * FROM expense_records WHERE id = ?') {
+        expect(params).toEqual([102])
+        return [{ id: 102, todo_id: 7, category: '其他支出' }]
+      }
+      return []
+    })
+    runMock.mockResolvedValue({ lastInsertRowid: 102, changes: 1 })
+
+    const { json, res } = createResponse()
+    const req = {
+      body: { todoId: 7, type: 'expense', amount: 88 },
+      user: { id: 99 },
+    } as any
+
+    await createExpense(req, res)
+
+    expect(runMock).toHaveBeenCalledWith(
+      'INSERT INTO expense_records (node_id, todo_id, user_id, type, amount, category, description) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [1, 7, 99, 'expense', 88, '其他支出', null]
+    )
+    expect(json).toHaveBeenCalledWith({ id: 102, todo_id: 7, category: '其他支出' })
+  })
+
+  it('defaults income category from type when category is omitted', async () => {
+    queryMock.mockImplementation((sql: string, params: any[] = []) => {
+      if (sql === 'SELECT t.* FROM todo_items t JOIN timeline_nodes n ON t.node_id = n.id WHERE t.id = ? AND n.user_id = ?') {
+        expect(params).toEqual([7, 99])
+        return [{ id: 7, node_id: 1 }]
+      }
+      if (sql === 'SELECT * FROM expense_records WHERE id = ?') {
+        expect(params).toEqual([103])
+        return [{ id: 103, todo_id: 7, category: '其他收入' }]
+      }
+      return []
+    })
+    runMock.mockResolvedValue({ lastInsertRowid: 103, changes: 1 })
+
+    const { json, res } = createResponse()
+    const req = {
+      body: { todoId: 7, type: 'income', amount: 188 },
+      user: { id: 99 },
+    } as any
+
+    await createExpense(req, res)
+
+    expect(runMock).toHaveBeenCalledWith(
+      'INSERT INTO expense_records (node_id, todo_id, user_id, type, amount, category, description) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [1, 7, 99, 'income', 188, '其他收入', null]
+    )
+    expect(json).toHaveBeenCalledWith({ id: 103, todo_id: 7, category: '其他收入' })
+  })
+
+  it.each([
+    ['invalid type', { todoId: 7, type: 'gift', amount: 100, category: '婚宴' }],
+    ['invalid amount zero', { todoId: 7, type: 'expense', amount: 0, category: '婚宴' }],
+    ['invalid amount negative', { todoId: 7, type: 'income', amount: -5, category: '彩礼' }],
+    ['blank category', { todoId: 7, type: 'expense', amount: 100, category: '   ' }],
+  ])('rejects invalid expense create payload: %s', async (_label, body) => {
+    const { json, status, res } = createResponse()
+    const req = {
+      body,
+      user: { id: 99 },
+    } as any
+
+    await createExpense(req, res)
+
+    expect(status).toHaveBeenCalledWith(400)
+    expect(json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }))
+    expect(queryMock).not.toHaveBeenCalled()
+    expect(runMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['invalid type', { type: 'gift' }],
+    ['invalid amount zero', { amount: 0 }],
+    ['invalid amount negative', { amount: -5 }],
+    ['blank category', { category: '   ' }],
+  ])('rejects invalid expense update payload: %s', async (_label, body) => {
+    queryMock.mockReturnValue([{ id: 7, node_id: 1 }])
+
+    const { json, status, res } = createResponse()
+    const req = {
+      params: { id: '7' },
+      body,
+      user: { id: 99 },
+    } as any
+
+    await updateExpense(req, res)
+
+    expect(status).toHaveBeenCalledWith(400)
+    expect(json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }))
+    expect(queryMock).toHaveBeenCalledWith(
+      'SELECT * FROM expense_records e JOIN timeline_nodes n ON e.node_id = n.id WHERE e.id = ? AND n.user_id = ?',
+      ['7', 99]
+    )
+    expect(runMock).not.toHaveBeenCalled()
   })
 
   it('rejects attachment upload without todoId', async () => {

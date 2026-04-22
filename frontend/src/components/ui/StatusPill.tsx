@@ -10,5 +10,5 @@ type StatusPillProps = {
 }
 
 export default function StatusPill({ status }: StatusPillProps) {
-  return <span className={`status-pill status-pill--${status}`}>{statusLabelMap[status]}</span>
+  return <span className={`status-pill whitespace-nowrap status-pill--${status}`}>{statusLabelMap[status]}</span>
 }

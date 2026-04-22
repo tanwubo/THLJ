@@ -76,6 +76,7 @@ export async function applyWorkbenchSchema(adapter: SchemaAdapter) {
       description TEXT,
       status TEXT DEFAULT 'pending',
       "order" INTEGER NOT NULL,
+      budget DECIMAL(10,2),
       deadline DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -124,6 +125,7 @@ export async function applyWorkbenchSchema(adapter: SchemaAdapter) {
   await ensureColumn(adapter, 'expense_records', 'todo_id', 'todo_id INTEGER');
   await ensureColumn(adapter, 'attachments', 'todo_id', 'todo_id INTEGER');
   await ensureColumn(adapter, 'users', 'data_owner_id', 'data_owner_id INTEGER');
+  await ensureColumn(adapter, 'timeline_nodes', 'budget', 'budget DECIMAL(10,2)');
   await adapter.run('UPDATE users SET data_owner_id = id WHERE data_owner_id IS NULL');
   await adapter.run(expenseRecordsTodoIndexSql);
   await adapter.run(attachmentsTodoIndexSql);

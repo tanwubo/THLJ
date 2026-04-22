@@ -75,6 +75,7 @@ const initialNodes = [
     description: '确认宴会厅',
     status: 'pending' as const,
     order: 1,
+    budget: 10000,
     deadline: '2026-05-01',
     progress: 10,
     createdAt: '2026-04-01',
@@ -507,6 +508,22 @@ describe('Timeline modal flows', () => {
     })
   })
 
+  it('cancels inline node name editing with escape without saving', async () => {
+    renderTimeline()
+
+    expect(await screen.findByText('订酒店')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('编辑节点名称'))
+
+    const inlineInput = screen.getByDisplayValue('订酒店')
+    fireEvent.change(inlineInput, { target: { value: '不会保存的新名称' } })
+    fireEvent.keyDown(inlineInput, { key: 'Escape' })
+
+    expect(updateNodeMock).not.toHaveBeenCalled()
+    expect(screen.getByText('订酒店')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('不会保存的新名称')).toBeNull()
+  })
+
   it('opens a status dropdown and saves the selected status inline', async () => {
     renderTimeline()
 
@@ -619,5 +636,53 @@ describe('Timeline modal flows', () => {
 
     expect(screen.getByRole('heading', { name: '婚礼时间线' })).toBeInTheDocument()
     expect(screen.queryByText('💒 婚嫁管家')).not.toBeInTheDocument()
+  })
+
+  it('renders nodes in backend order without re-sorting by deadline', async () => {
+    getTimelineMock.mockResolvedValueOnce({
+      data: {
+        nodes: [
+          {
+            id: 2,
+            name: '后返回的节点',
+            description: 'deadline 更晚',
+            status: 'pending',
+            order: 2,
+            budget: 20000,
+            deadline: '2026-06-01',
+            progress: 0,
+            createdAt: '2026-04-02',
+            updatedAt: '2026-04-02',
+          },
+          {
+            id: 1,
+            name: '先返回的节点',
+            description: 'deadline 更早',
+            status: 'pending',
+            order: 1,
+            budget: 10000,
+            deadline: '2026-05-01',
+            progress: 0,
+            createdAt: '2026-04-01',
+            updatedAt: '2026-04-01',
+          },
+        ],
+        overallProgress: 0,
+      },
+    } as Awaited<ReturnType<typeof timelineAPI.getTimeline>>)
+
+    renderTimeline()
+
+    const titles = await screen.findAllByText(/返回的节点/)
+    expect(titles.map((item) => item.textContent)).toEqual(['后返回的节点', '先返回的节点'])
+  })
+
+  it('keeps the status pill on one line', async () => {
+    renderTimeline()
+
+    await screen.findByText('订酒店')
+
+    const pill = screen.getByText('待处理')
+    expect(pill).toHaveClass('whitespace-nowrap')
   })
 })

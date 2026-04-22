@@ -14,8 +14,6 @@ export function TodoExpenseSection({ todo, expanded, onToggle, onRefresh }: Todo
   const [visible, setVisible] = useState(false)
   const [type, setType] = useState<'income' | 'expense'>('expense')
   const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState('')
-  const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const summary = useMemo(() => {
@@ -36,13 +34,12 @@ export function TodoExpenseSection({ todo, expanded, onToggle, onRefresh }: Todo
   const resetForm = () => {
     setType('expense')
     setAmount('')
-    setCategory('')
-    setDescription('')
   }
 
   const handleCreate = async () => {
-    if (!amount || !category.trim()) {
-      Toast.show('请填写完整费用信息')
+    const parsedAmount = Number(amount)
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      Toast.show('金额必须是大于 0 的数字')
       return
     }
 
@@ -51,9 +48,7 @@ export function TodoExpenseSection({ todo, expanded, onToggle, onRefresh }: Todo
       await expenseAPI.createExpense({
         todoId: todo.id,
         type,
-        amount: Number(amount),
-        category: category.trim(),
-        description: description.trim() || undefined,
+        amount: parsedAmount,
       })
       Toast.show('费用已添加')
       setVisible(false)
@@ -67,8 +62,12 @@ export function TodoExpenseSection({ todo, expanded, onToggle, onRefresh }: Todo
   }
 
   const handleDelete = async (expenseId: number) => {
+    const confirmed = await Dialog.confirm({ content: '确定删除该费用记录？' }).then(() => true).catch(() => false)
+    if (!confirmed) {
+      return
+    }
+
     try {
-      await Dialog.confirm({ content: '确定删除该费用记录？' })
       await expenseAPI.deleteExpense(expenseId)
       Toast.show('删除成功')
       await onRefresh()
@@ -133,8 +132,6 @@ export function TodoExpenseSection({ todo, expanded, onToggle, onRefresh }: Todo
             </Button>
           </div>
           <Input placeholder="金额" value={amount} onChange={setAmount} type="number" clearable />
-          <Input placeholder="分类" value={category} onChange={setCategory} clearable />
-          <Input placeholder="描述（可选）" value={description} onChange={setDescription} clearable />
           <div className="flex gap-3">
             <Button block onClick={() => setVisible(false)}>
               取消

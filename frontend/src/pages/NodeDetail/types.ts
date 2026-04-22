@@ -14,7 +14,11 @@ export type WorkbenchTodo = Todo & {
 }
 
 export type NodeWorkbenchData = {
-  node: TimelineNode
+  node: TimelineNode & {
+    budget: number
+    expenses: Expense[]
+    attachments: Attachment[]
+  }
   todos: WorkbenchTodo[]
   memo: Memo | null
 }

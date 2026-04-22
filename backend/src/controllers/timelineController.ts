@@ -2,13 +2,54 @@ import { Request, Response } from 'express';
 import { query, run } from '../db';
 import { AuthRequest } from '../middleware/auth';
 
+function parseBudget(input: unknown): { value?: number; error?: string } {
+  if (input === undefined) {
+    return {};
+  }
+  if (input === '') {
+    return { value: 0 };
+  }
+
+  let value: number;
+  if (typeof input === 'number') {
+    value = input;
+  } else if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed || !/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
+      return { error: '预算必须是大于等于 0 的数字' };
+    }
+    value = Number(trimmed);
+  } else {
+    return { error: '预算必须是大于等于 0 的数字' };
+  }
+
+  if (!Number.isFinite(value) || value < 0) {
+    return { error: '预算必须是大于等于 0 的数字' };
+  }
+
+  return { value };
+}
+
+function parseNodeName(input: unknown): { value?: string; error?: string } {
+  if (typeof input !== 'string') {
+    return { error: '节点名称不能为空' };
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { error: '节点名称不能为空' };
+  }
+
+  return { value: trimmed };
+}
+
 // 获取用户时间线
 export const getTimeline = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const dataOwnerId = req.user?.dataOwnerId ?? userId;
 
-    const nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC', [dataOwnerId]);
+    const nodes = query('SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, "order" ASC', [dataOwnerId]);
 
     // 计算每个节点的进度（基于待办完成情况）
     const nodesWithProgress = nodes.map((node: any) => {
@@ -34,10 +75,16 @@ export const createNode = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const dataOwnerId = req.user?.dataOwnerId ?? userId;
-    const { name, description, deadline } = req.body;
+    const { name, description, deadline, budget } = req.body;
 
-    if (!name || !name.trim()) {
+    const nameResult = parseNodeName(name);
+    if (nameResult.error) {
       return res.status(400).json({ error: '节点名称不能为空' });
+    }
+
+    const budgetResult = parseBudget(budget);
+    if (budgetResult.error) {
+      return res.status(400).json({ error: budgetResult.error });
     }
 
     // 获取当前最大 order
@@ -45,8 +92,8 @@ export const createNode = async (req: AuthRequest, res: Response) => {
     const newOrder = (maxOrder[0]?.max || 0) + 1;
 
     const result = await run(
-      'INSERT INTO timeline_nodes (user_id, name, description, deadline, "order", status) VALUES (?, ?, ?, ?, ?, ?)',
-      [dataOwnerId, name.trim(), description || null, deadline || null, newOrder, 'pending']
+      'INSERT INTO timeline_nodes (user_id, name, description, deadline, budget, "order", status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [dataOwnerId, name.trim(), description || null, deadline || null, budgetResult.value ?? null, newOrder, 'pending']
     );
 
     const node = query('SELECT * FROM timeline_nodes WHERE id = ?', [result.lastInsertRowid]);
@@ -63,7 +110,7 @@ export const updateNode = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const dataOwnerId = req.user?.dataOwnerId ?? userId;
     const { id } = req.params;
-    const { name, description, deadline, status } = req.body;
+    const { name, description, deadline, status, budget } = req.body;
 
     // 验证节点归属
     const node = query('SELECT * FROM timeline_nodes WHERE id = ? AND user_id = ?', [id, dataOwnerId]);
@@ -74,10 +121,25 @@ export const updateNode = async (req: AuthRequest, res: Response) => {
     const updates: string[] = [];
     const values: any[] = [];
 
-    if (name !== undefined) { updates.push('name = ?'); values.push(name.trim()); }
+    if (name !== undefined) {
+      const nameResult = parseNodeName(name);
+      if (nameResult.error) {
+        return res.status(400).json({ error: nameResult.error });
+      }
+      updates.push('name = ?');
+      values.push(nameResult.value);
+    }
     if (description !== undefined) { updates.push('description = ?'); values.push(description); }
     if (deadline !== undefined) { updates.push('deadline = ?'); values.push(deadline); }
     if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (budget !== undefined) {
+      const budgetResult = parseBudget(budget);
+      if (budgetResult.error) {
+        return res.status(400).json({ error: budgetResult.error });
+      }
+      updates.push('budget = ?');
+      values.push(budgetResult.value ?? null);
+    }
 
     if (updates.length > 0) {
       updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -150,8 +212,11 @@ export const getNodeWorkbench = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: '节点不存在' });
     }
 
-    const todos = query('SELECT * FROM todo_items WHERE node_id = ? ORDER BY created_at DESC', [id]);
+    const todos = query('SELECT * FROM todo_items WHERE node_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, created_at DESC', [id]);
     const todoIds = todos.map((todo: any) => todo.id);
+
+    const legacyExpenses = query('SELECT * FROM expense_records WHERE node_id = ? AND todo_id IS NULL ORDER BY created_at DESC', [id]);
+    const legacyAttachments = query('SELECT * FROM attachments WHERE node_id = ? AND todo_id IS NULL ORDER BY created_at DESC', [id]);
 
     const expenses = todoIds.length
       ? query(`SELECT * FROM expense_records WHERE todo_id IN (${todoIds.map(() => '?').join(',')})`, todoIds)
@@ -167,7 +232,13 @@ export const getNodeWorkbench = async (req: AuthRequest, res: Response) => {
       attachments: attachments.filter((attachment: any) => attachment.todo_id === todo.id),
     }));
 
-    res.json({ node: nodes[0], todos: groupedTodos, memo });
+    const nodePayload = {
+      ...nodes[0],
+      ...(legacyExpenses.length > 0 ? { expenses: legacyExpenses } : {}),
+      ...(legacyAttachments.length > 0 ? { attachments: legacyAttachments } : {}),
+    };
+
+    res.json({ node: nodePayload, todos: groupedTodos, memo });
   } catch (error: any) {
     console.error('获取工作台失败:', error);
     res.status(500).json({ error: '获取工作台失败' });
