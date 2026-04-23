@@ -1,6 +1,177 @@
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AiParseCommandResponse } from '../services/api'
+import { aiAPI, expenseAPI, timelineAPI, todoAPI } from '../services/api'
+import AIAssistantFloatingEntry from '../components/ai/AIAssistantFloatingEntry'
 import { confirmAiDraft } from '../components/ai/aiDraftActions'
+
+const mocks = vi.hoisted(() => ({
+  parseCommand: vi.fn(),
+  createNode: vi.fn(),
+  createTodo: vi.fn(),
+  createExpense: vi.fn(),
+  emitRealtimeEvent: vi.fn(),
+}))
+
+vi.mock('../services/api', () => ({
+  aiAPI: {
+    parseCommand: mocks.parseCommand,
+  },
+  timelineAPI: {
+    createNode: mocks.createNode,
+  },
+  todoAPI: {
+    createTodo: mocks.createTodo,
+  },
+  expenseAPI: {
+    createExpense: mocks.createExpense,
+  },
+}))
+
+vi.mock('../store/authStore', () => ({
+  useAuthStore: () => ({
+    emitRealtimeEvent: mocks.emitRealtimeEvent,
+  }),
+}))
+
+function renderAssistant(initialPath = '/') {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="/" element={<AIAssistantFloatingEntry />} />
+        <Route path="/node/:id" element={<AIAssistantFloatingEntry />} />
+        <Route path="/statistics" element={<AIAssistantFloatingEntry />} />
+        <Route path="/settings/*" element={<AIAssistantFloatingEntry />} />
+      </Routes>
+    </MemoryRouter>
+  )
+}
+
+async function openAssistant() {
+  const entry = screen.getByRole('button', { name: /AI 对话入口/ })
+  expect(entry).toHaveClass('ai-floating-entry')
+  fireEvent.click(entry)
+  expect(await screen.findByText('一句话添加节点/待办/费用')).toBeInTheDocument()
+  expect(screen.getByText(/AI 会先生成草稿/)).toBeInTheDocument()
+  return screen.getByPlaceholderText('例如：增加一个10月1日拍婚纱照的节点') as HTMLTextAreaElement
+}
+
+describe('AIAssistantFloatingEntry', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.createNode.mockResolvedValue({})
+    mocks.createTodo.mockResolvedValue({})
+    mocks.createExpense.mockResolvedValue({})
+  })
+
+  it('opens an accessible drawer from a circular floating button', async () => {
+    renderAssistant()
+
+    const textarea = await openAssistant()
+
+    expect(textarea).toBeInTheDocument()
+  })
+
+  it('confirms a ready create-node parse result', async () => {
+    mocks.parseCommand.mockResolvedValue({
+      data: {
+        status: 'ready',
+        draft: {
+          actionType: 'create_node',
+          fields: { name: '拍婚纱照', deadline: '2026-10-01' },
+        },
+        summary: '将新增节点：拍婚纱照，截止 2026-10-01',
+        missingFields: [],
+        candidates: {},
+      } satisfies AiParseCommandResponse,
+    })
+    renderAssistant()
+    const textarea = await openAssistant()
+
+    fireEvent.change(textarea, { target: { value: '增加一个10月1日拍婚纱照的节点' } })
+    fireEvent.click(screen.getByRole('button', { name: '解析' }))
+    expect(await screen.findByText('将新增节点：拍婚纱照，截止 2026-10-01')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确认添加' }))
+
+    await waitFor(() => {
+      expect(timelineAPI.createNode).toHaveBeenCalledWith({
+        name: '拍婚纱照',
+        deadline: '2026-10-01',
+      })
+    })
+    expect(await screen.findByText('创建成功')).toBeInTheDocument()
+  })
+
+  it('selects a candidate node before confirming a todo draft', async () => {
+    mocks.parseCommand.mockResolvedValue({
+      data: {
+        status: 'needs_input',
+        draft: {
+          actionType: 'create_todo',
+          fields: { content: '确认菜单' },
+        },
+        summary: '请选择要添加待办的节点',
+        missingFields: ['nodeId'],
+        candidates: { nodes: [{ id: 13, name: '婚宴' }] },
+      } satisfies AiParseCommandResponse,
+    })
+    renderAssistant()
+    const textarea = await openAssistant()
+
+    fireEvent.change(textarea, { target: { value: '婚宴增加确认菜单待办' } })
+    fireEvent.click(screen.getByRole('button', { name: '解析' }))
+    fireEvent.click(await screen.findByRole('button', { name: '选择 婚宴' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认添加' }))
+
+    await waitFor(() => {
+      expect(todoAPI.createTodo).toHaveBeenCalledWith({
+        nodeId: 13,
+        content: '确认菜单',
+        deadline: undefined,
+      })
+    })
+  })
+
+  it('sends node detail page context when opened on a node route', async () => {
+    mocks.parseCommand.mockResolvedValue({
+      data: {
+        status: 'unsupported',
+        draft: null,
+        summary: '暂不支持',
+        missingFields: [],
+        candidates: {},
+      } satisfies AiParseCommandResponse,
+    })
+    renderAssistant('/node/18')
+    const textarea = await openAssistant()
+
+    fireEvent.change(textarea, { target: { value: '添加待办' } })
+    fireEvent.click(screen.getByRole('button', { name: '解析' }))
+
+    await waitFor(() => {
+      expect(aiAPI.parseCommand).toHaveBeenCalledWith({
+        message: '添加待办',
+        page: 'node-detail',
+        currentNodeId: 18,
+      })
+    })
+  })
+
+  it('shows parse API errors and keeps the original input value', async () => {
+    mocks.parseCommand.mockRejectedValue({
+      response: { data: { error: '节点不存在' } },
+    })
+    renderAssistant()
+    const textarea = await openAssistant()
+
+    fireEvent.change(textarea, { target: { value: '给不存在节点添加待办' } })
+    fireEvent.click(screen.getByRole('button', { name: '解析' }))
+
+    expect(await screen.findByText('节点不存在')).toBeInTheDocument()
+    expect(textarea).toHaveValue('给不存在节点添加待办')
+  })
+})
 
 describe('confirmAiDraft', () => {
   it('creates a node from a ready node draft', async () => {

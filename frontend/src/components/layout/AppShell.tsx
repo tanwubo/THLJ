@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react'
+import AIAssistantFloatingEntry from '../ai/AIAssistantFloatingEntry'
 import BottomNav from './BottomNav'
 
 type AppShellProps = PropsWithChildren<{
@@ -15,6 +16,7 @@ export default function AppShell({ children, header, withBottomNav = false, cont
       <div className="app-shell__backdrop" aria-hidden="true" />
       {header ? <div className="app-shell__header">{header}</div> : null}
       <main className={contentClasses}>{children}</main>
+      <AIAssistantFloatingEntry />
       {withBottomNav ? <BottomNav /> : null}
     </div>
   )

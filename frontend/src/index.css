@@ -218,6 +218,221 @@ body,
   opacity: 0.88;
 }
 
+.ai-floating-entry {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  z-index: 12;
+  width: 74px;
+  height: 74px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid rgba(238, 215, 172, 0.78);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 250, 230, 0.28), transparent 28%),
+    linear-gradient(145deg, #102f28 0%, #17463c 54%, #0b221e 100%);
+  box-shadow: 0 20px 42px rgba(12, 39, 33, 0.28), 0 0 0 8px rgba(255, 248, 235, 0.34);
+  color: #fff8ea;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.ai-floating-entry:hover,
+.ai-floating-entry:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 50px rgba(12, 39, 33, 0.32), 0 0 0 8px rgba(255, 248, 235, 0.42);
+}
+
+.ai-floating-entry:focus-visible,
+.ai-confirm-card__choice:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 3px;
+}
+
+.ai-floating-entry__mark {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.28rem;
+  line-height: 1;
+  letter-spacing: 0.03em;
+}
+
+.ai-floating-entry__copy {
+  font-size: 0.68rem;
+  line-height: 1;
+  letter-spacing: 0.08em;
+}
+
+.ai-assistant-popup {
+  background: transparent;
+}
+
+.ai-assistant-drawer {
+  display: grid;
+  gap: 16px;
+  min-height: 58vh;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 12px 20px calc(22px + env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at top right, rgba(200, 160, 98, 0.22), transparent 32%),
+    radial-gradient(circle at 10% 0%, rgba(23, 70, 60, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(255, 252, 246, 0.99) 0%, rgba(246, 237, 226, 0.98) 100%);
+  color: var(--text-primary);
+}
+
+.ai-assistant-drawer__handle {
+  width: 54px;
+  height: 5px;
+  margin: 0 auto 2px;
+  border-radius: 999px;
+  background: rgba(23, 70, 60, 0.22);
+}
+
+.ai-assistant-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ai-assistant-drawer__header h2 {
+  margin-top: 8px;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.55rem;
+  line-height: 1.16;
+}
+
+.ai-assistant-drawer__copy {
+  max-width: 34rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.ai-assistant-drawer__composer {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-assistant-drawer__input {
+  min-height: 116px;
+  border-color: rgba(23, 70, 60, 0.14);
+  background: rgba(255, 253, 249, 0.94);
+}
+
+.ai-assistant-drawer__error,
+.ai-assistant-drawer__success {
+  padding: 12px 14px;
+  border-radius: 18px;
+  line-height: 1.5;
+}
+
+.ai-assistant-drawer__error {
+  border: 1px solid rgba(127, 23, 48, 0.18);
+  background: rgba(127, 23, 48, 0.08);
+  color: #7f1730;
+}
+
+.ai-assistant-drawer__success {
+  border: 1px solid rgba(23, 70, 60, 0.18);
+  background: rgba(23, 70, 60, 0.09);
+  color: #17463c;
+}
+
+.ai-confirm-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(23, 70, 60, 0.14);
+  border-radius: 26px;
+  background:
+    linear-gradient(135deg, rgba(255, 252, 246, 0.96), rgba(250, 241, 229, 0.92)),
+    var(--bg-elevated);
+  box-shadow: 0 18px 40px rgba(40, 49, 39, 0.1);
+}
+
+.ai-confirm-card--muted {
+  border-style: dashed;
+  color: var(--text-secondary);
+}
+
+.ai-confirm-card__header {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-confirm-card__eyebrow {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #17463c;
+}
+
+.ai-confirm-card__header h3 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.32rem;
+}
+
+.ai-confirm-card__summary {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.ai-confirm-card__fields {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-confirm-card__field {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(200, 160, 98, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 253, 249, 0.72);
+}
+
+.ai-confirm-card__field dt {
+  color: var(--text-muted);
+}
+
+.ai-confirm-card__field dd {
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.ai-confirm-card__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ai-confirm-card__choice {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid rgba(23, 70, 60, 0.18);
+  border-radius: 999px;
+  background: rgba(23, 70, 60, 0.07);
+  color: #17463c;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.ai-confirm-card__choice:hover {
+  border-color: rgba(23, 70, 60, 0.28);
+  background: rgba(23, 70, 60, 0.11);
+  transform: translateY(-1px);
+}
+
+.ai-confirm-card__confirm {
+  width: 100%;
+  background: linear-gradient(135deg, #17463c 0%, #0f3029 100%);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
