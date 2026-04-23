@@ -32,12 +32,7 @@ function extractText(payload: any): string | null {
   return typeof text === 'string' && text.trim() ? text : null
 }
 
-function extractFirstJsonObject(text: string): string | null {
-  const start = text.indexOf('{')
-  if (start === -1) {
-    return null
-  }
-
+function findJsonObjectEnd(text: string, start: number): number | null {
   let depth = 0
   let inString = false
   let escaped = false
@@ -63,8 +58,25 @@ function extractFirstJsonObject(text: string): string | null {
     } else if (char === '}') {
       depth -= 1
       if (depth === 0) {
-        return text.slice(start, index + 1)
+        return index
       }
+    }
+  }
+
+  return null
+}
+
+function parseFirstJsonObject(text: string): AiParseResult | null {
+  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
+    const end = findJsonObjectEnd(text, start)
+    if (end === null) {
+      continue
+    }
+
+    try {
+      return JSON.parse(text.slice(start, end + 1)) as AiParseResult
+    } catch {
+      continue
     }
   }
 
@@ -113,16 +125,12 @@ export function createMiniMaxProvider(options: MiniMaxProviderOptions): MiniMaxP
         throw new AiProviderError('AI 响应缺少文本内容', 'malformed', payload)
       }
 
-      const jsonText = extractFirstJsonObject(text)
-      if (!jsonText) {
-        throw new AiProviderError('AI 响应缺少 JSON 对象', 'malformed', text)
+      const parsed = parseFirstJsonObject(text)
+      if (!parsed) {
+        throw new AiProviderError('AI 响应缺少可解析的 JSON 对象', 'malformed', text)
       }
 
-      try {
-        return JSON.parse(jsonText) as AiParseResult
-      } catch (error) {
-        throw new AiProviderError('AI 响应 JSON 无法解析', 'malformed', error)
-      }
+      return parsed
     } catch (error) {
       if (error instanceof AiProviderError) {
         throw error

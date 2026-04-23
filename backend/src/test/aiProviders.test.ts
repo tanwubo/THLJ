@@ -237,6 +237,38 @@ describe('AI context and providers', () => {
     expect(result.draft?.fields.name).toBe('拍婚纱照')
   })
 
+  it('skips invalid MiniMax JSON-like thinking text and parses the final JSON object', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: `<think>maybe {name: 拍婚纱照}</think>\n\n${JSON.stringify({
+                status: 'ready',
+                draft: { actionType: 'create_node', fields: { name: '拍婚纱照', deadline: '2026-10-01' } },
+                summary: '将新增节点：拍婚纱照，截止 2026-10-01',
+                missingFields: [],
+                candidates: {},
+              })}`,
+            },
+          },
+        ],
+      }),
+    })
+    const provider = createMiniMaxProvider({
+      apiKey: 'test-key',
+      model: 'MiniMax-M2.7',
+      baseUrl: 'https://api.minimax.io/v1',
+      timeoutMs: 15000,
+      fetchImpl: fetchMock,
+    })
+
+    const result = await provider.parseCommand({ message: '增加一个10月1日拍婚纱照的节点', page: 'timeline' }, context)
+
+    expect(result.draft?.fields.name).toBe('拍婚纱照')
+  })
+
   it('throws malformed when MiniMax content does not contain a JSON object', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
