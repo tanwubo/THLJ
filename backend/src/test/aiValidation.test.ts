@@ -24,6 +24,50 @@ const context: AiCommandContext = {
 }
 
 describe('validateAiParseResult', () => {
+  it.each([
+    'create_node',
+    'create_todo',
+    'create_expense',
+  ])('returns unsupported for malformed ready %s drafts without fields', actionType => {
+    const result = validateAiParseResult({
+      status: 'ready',
+      draft: { actionType },
+      summary: '模型返回了不完整草稿',
+      missingFields: [],
+      candidates: {},
+    } as unknown as AiParseResult, context)
+
+    expect(result).toEqual({
+      status: 'unsupported',
+      draft: null,
+      summary: '暂不支持这个操作。当前只支持新增节点、待办和费用。',
+      missingFields: [],
+      candidates: {},
+    })
+  })
+
+  it.each([
+    'create_node',
+    'create_todo',
+    'create_expense',
+  ])('returns unsupported for malformed ready %s drafts with non-object fields', actionType => {
+    const result = validateAiParseResult({
+      status: 'ready',
+      draft: { actionType, fields: null },
+      summary: '模型返回了无效草稿',
+      missingFields: [],
+      candidates: {},
+    } as unknown as AiParseResult, context)
+
+    expect(result).toEqual({
+      status: 'unsupported',
+      draft: null,
+      summary: '暂不支持这个操作。当前只支持新增节点、待办和费用。',
+      missingFields: [],
+      candidates: {},
+    })
+  })
+
   it('accepts a ready create node draft with normalized deadline', () => {
     const result = validateAiParseResult({
       status: 'ready',

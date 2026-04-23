@@ -278,6 +278,10 @@ function sanitizeActionableDraft(raw: AiParseResult, context: AiCommandContext):
     return unsupportedResult()
   }
 
+  if (!isRecord(raw.draft.fields)) {
+    return unsupportedResult()
+  }
+
   if (raw.draft.actionType === 'create_node') {
     return sanitizeNodeDraft(raw)
   }
