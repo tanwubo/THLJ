@@ -11,22 +11,19 @@ import todoRoutes from './routes/todoRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import memoRoutes from './routes/memoRoutes';
 import attachmentRoutes from './routes/attachmentRoutes';
+import { getCorsOrigin } from './config/cors';
 
 const app = express();
 const server = http.createServer(app);
 
-const corsOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://yourdomain.com']
-  : [
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-    ];
+const corsOrigin = getCorsOrigin({
+  nodeEnv: process.env.NODE_ENV,
+  corsOrigins: process.env.CORS_ORIGINS,
+});
 
 const io = new Server(server, {
   cors: {
-    origin: corsOrigins,
+    origin: (origin, callback) => callback(null, corsOrigin(origin)),
     credentials: true,
     methods: ["GET", "POST"]
   }
@@ -34,7 +31,10 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: corsOrigins, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => callback(null, corsOrigin(origin)),
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.static('public'));
 
