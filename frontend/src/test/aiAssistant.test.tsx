@@ -52,9 +52,9 @@ async function openAssistant() {
   const entry = screen.getByRole('button', { name: /AI 对话入口/ })
   expect(entry).toHaveClass('ai-floating-entry')
   fireEvent.click(entry)
-  expect(await screen.findByText('一句话添加节点/待办/费用')).toBeInTheDocument()
+  expect(await screen.findByRole('dialog', { name: '一句话添加节点/待办/费用' })).toBeInTheDocument()
   expect(screen.getByText(/AI 会先生成草稿/)).toBeInTheDocument()
-  return screen.getByPlaceholderText('例如：增加一个10月1日拍婚纱照的节点') as HTMLTextAreaElement
+  return screen.getByLabelText('请输入要解析的 AI 指令') as HTMLTextAreaElement
 }
 
 describe('AIAssistantFloatingEntry', () => {
@@ -131,6 +131,32 @@ describe('AIAssistantFloatingEntry', () => {
         deadline: undefined,
       })
     })
+  })
+
+  it('keeps an expense draft incomplete after selecting only a candidate node', async () => {
+    mocks.parseCommand.mockResolvedValue({
+      data: {
+        status: 'needs_input',
+        draft: {
+          actionType: 'create_expense',
+          fields: { type: 'expense', amount: 3000, category: '婚纱摄影' },
+        },
+        summary: '请选择要记录费用的待办',
+        missingFields: ['todoId'],
+        candidates: { nodes: [{ id: 13, name: '婚宴' }] },
+      } satisfies AiParseCommandResponse,
+    })
+    renderAssistant()
+    const textarea = await openAssistant()
+
+    fireEvent.change(textarea, { target: { value: '婚宴记录摄影费用3000' } })
+    fireEvent.click(screen.getByRole('button', { name: '解析' }))
+    fireEvent.click(await screen.findByRole('button', { name: '选择 婚宴' }))
+
+    const confirmButton = screen.getByRole('button', { name: '确认添加' })
+    expect(confirmButton).toBeDisabled()
+    fireEvent.click(confirmButton)
+    expect(expenseAPI.createExpense).not.toHaveBeenCalled()
   })
 
   it('sends node detail page context when opened on a node route', async () => {

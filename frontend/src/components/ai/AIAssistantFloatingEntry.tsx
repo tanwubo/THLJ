@@ -69,17 +69,42 @@ export default function AIAssistantFloatingEntry() {
   const handleSelectNode = (node: { id: number; name: string }) => {
     setResult((current) => {
       if (!current?.draft) return current
+
+      const nextFields = {
+        ...current.draft.fields,
+        nodeId: node.id,
+        nodeName: node.name,
+      }
+
+      if (current.draft.actionType === 'create_todo') {
+        return {
+          ...current,
+          status: 'ready',
+          missingFields: [],
+          draft: {
+            ...current.draft,
+            fields: nextFields,
+          },
+        }
+      }
+
+      if (current.draft.actionType === 'create_expense') {
+        return {
+          ...current,
+          status: 'needs_input',
+          missingFields: Array.from(new Set([...current.missingFields, 'todoId'])),
+          draft: {
+            ...current.draft,
+            fields: nextFields,
+          },
+        }
+      }
+
       return {
         ...current,
-        status: 'ready',
-        missingFields: [],
         draft: {
           ...current.draft,
-          fields: {
-            ...current.draft.fields,
-            nodeId: node.id,
-            nodeName: node.name,
-          },
+          fields: nextFields,
         },
       }
     })
@@ -148,12 +173,17 @@ export default function AIAssistantFloatingEntry() {
         bodyClassName="ai-assistant-popup"
         bodyStyle={{ borderTopLeftRadius: 30, borderTopRightRadius: 30 }}
       >
-        <div className="ai-assistant-drawer">
+        <div
+          className="ai-assistant-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ai-assistant-drawer-title"
+        >
           <div className="ai-assistant-drawer__handle" aria-hidden="true" />
           <header className="ai-assistant-drawer__header">
             <div>
               <p className="section-label">AI Assistant</p>
-              <h2>一句话添加节点/待办/费用</h2>
+              <h2 id="ai-assistant-drawer-title">一句话添加节点/待办/费用</h2>
             </div>
             <button type="button" className="brand-inline-button" onClick={() => setVisible(false)}>
               关闭
@@ -166,6 +196,7 @@ export default function AIAssistantFloatingEntry() {
               className="themed-textarea ai-assistant-drawer__input"
               value={message}
               onChange={(event) => setMessage(event.target.value)}
+              aria-label="请输入要解析的 AI 指令"
               placeholder="例如：增加一个10月1日拍婚纱照的节点"
             />
             <button type="button" className="brand-primary-button" onClick={() => void handleParse()} disabled={parsing || !message.trim()}>
