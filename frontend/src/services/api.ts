@@ -46,6 +46,49 @@ export interface User {
   lastLogin: string
 }
 
+export type AiPage = 'timeline' | 'node-detail' | 'statistics' | 'settings' | 'unknown'
+
+export type AiStatus = 'ready' | 'needs_input' | 'unsupported'
+
+export type AiActionType = 'create_node' | 'create_todo' | 'create_expense'
+
+export interface AiParseCommandRequest {
+  message: string
+  page: AiPage
+  currentNodeId?: number | null
+}
+
+export interface AiDraftFields {
+  name?: string
+  description?: string
+  deadline?: string
+  budget?: number
+  nodeId?: number
+  nodeName?: string
+  content?: string
+  todoId?: number
+  todoName?: string
+  type?: 'income' | 'expense'
+  amount?: number
+  category?: string
+}
+
+export interface AiDraft {
+  actionType: AiActionType
+  fields: AiDraftFields
+}
+
+export interface AiParseCommandResponse {
+  status: AiStatus
+  draft: AiDraft | null
+  summary: string
+  missingFields: string[]
+  candidates: {
+    nodes: Array<{ id: number; name: string }>
+    todos: Array<{ id: number; name: string }>
+  }
+}
+
 // 认证相关API
 export const authAPI = {
   register: (data: { username: string; password: string; email?: string }) =>
@@ -65,6 +108,11 @@ export const authAPI = {
 
   getBackup: () =>
     api.get('/auth/backup'),
+}
+
+export const aiAPI = {
+  parseCommand: (data: AiParseCommandRequest) =>
+    api.post<AiParseCommandResponse>('/ai/parse-command', data),
 }
 
 // 时间线节点类型定义
