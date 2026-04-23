@@ -7,20 +7,25 @@ import type {
   AiParseResult,
   AiStatus,
   AiActionType,
+  ExpenseType,
 } from './types'
 
-const UNSUPPORTED_RESULT = {
-  status: 'unsupported' as AiStatus,
-  draft: null,
-  summary: '暂不支持这个操作。当前只支持新增节点、待办和费用。',
-  missingFields: [],
-  candidates: {},
-}
+const UNSUPPORTED_MESSAGE = '暂不支持这个操作。当前只支持新增节点、待办和费用。'
 
-const VALID_EXPENSE_CATEGORIES = {
+const VALID_EXPENSE_CATEGORIES: Record<ExpenseType, readonly string[]> = {
   income: ['彩礼', '礼金', '嫁妆回礼', '其他收入'],
   expense: ['婚宴', '婚庆', '婚车', '婚纱摄影', '三金/五金', '酒店预订', '婚车车队', '蜜月旅行', '其他支出'],
-} as const
+}
+
+function unsupportedResult(): AiParseResult {
+  return {
+    status: 'unsupported',
+    draft: null,
+    summary: UNSUPPORTED_MESSAGE,
+    missingFields: [],
+    candidates: {},
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -89,52 +94,69 @@ function hasNode(context: AiCommandContext, nodeId: unknown): nodeId is number {
   return typeof nodeId === 'number' && Number.isInteger(nodeId) && context.nodes.some(node => node.id === nodeId)
 }
 
-function hasTodo(context: AiCommandContext, todoId: unknown): todoId is number {
-  return typeof todoId === 'number' && Number.isInteger(todoId) && context.nodes.some(node => node.todos.some(todo => todo.id === todoId))
+function getNodeById(context: AiCommandContext, nodeId: number) {
+  return context.nodes.find(node => node.id === nodeId) ?? null
 }
 
-function findTodoNode(context: AiCommandContext, todoId: number): { nodeId: number; nodeName: string } | null {
+function getTodoById(context: AiCommandContext, todoId: number): { nodeId: number; nodeName: string; todoName: string } | null {
   for (const node of context.nodes) {
-    if (node.todos.some(todo => todo.id === todoId)) {
-      return { nodeId: node.id, nodeName: node.name }
+    const todo = node.todos.find(item => item.id === todoId)
+    if (todo) {
+      return {
+        nodeId: node.id,
+        nodeName: node.name,
+        todoName: todo.content,
+      }
     }
   }
 
   return null
 }
 
-function normalizeExpenseCategory(fields: AiDraftFields, type: 'income' | 'expense'): string {
+function hasTodo(context: AiCommandContext, todoId: unknown): todoId is number {
+  return typeof todoId === 'number' && Number.isInteger(todoId) && getTodoById(context, todoId) !== null
+}
+
+function isValidExpenseCategory(category: string, type: ExpenseType): boolean {
+  return (VALID_EXPENSE_CATEGORIES[type] as readonly string[]).includes(category)
+}
+
+function normalizeExpenseCategory(fields: AiDraftFields, type: ExpenseType): string {
   const category = normalizeString(fields.category)
   if (!category) {
     return type === 'income' ? '其他收入' : '其他支出'
   }
 
-  const validCategories = VALID_EXPENSE_CATEGORIES[type]
-  return validCategories.includes(category as (typeof validCategories)[number])
-    ? category
-    : type === 'income'
-      ? '其他收入'
-      : '其他支出'
+  return isValidExpenseCategory(category, type) ? category : type === 'income' ? '其他收入' : '其他支出'
 }
 
-function normalizeNodeDraft(draft: AiDraft): AiParseResult {
-  const name = normalizeString(draft.fields.name)
+function sanitizeNodeDraft(raw: AiParseResult): AiParseResult {
+  if (!raw.draft || raw.draft.actionType !== 'create_node') {
+    return unsupportedResult()
+  }
+
+  const name = normalizeString(raw.draft.fields.name)
   if (!name) {
-    return UNSUPPORTED_RESULT
+    return unsupportedResult()
+  }
+
+  const budgetValue = raw.draft.fields.budget
+  const budget = budgetValue === undefined ? undefined : normalizeBudget(budgetValue)
+  if (budgetValue !== undefined && budget === undefined) {
+    return unsupportedResult()
   }
 
   const fields: AiDraftFields = { name }
-  const deadline = normalizeDate(draft.fields.deadline)
+  const deadline = normalizeDate(raw.draft.fields.deadline)
   if (deadline) {
     fields.deadline = deadline
   }
 
-  const description = normalizeString(draft.fields.description)
+  const description = normalizeString(raw.draft.fields.description)
   if (description) {
     fields.description = description
   }
 
-  const budget = normalizeBudget(draft.fields.budget)
   if (budget !== undefined) {
     fields.budget = budget
   }
@@ -142,26 +164,30 @@ function normalizeNodeDraft(draft: AiDraft): AiParseResult {
   return {
     status: 'ready',
     draft: { actionType: 'create_node', fields },
-    summary: '',
+    summary: raw.summary,
     missingFields: [],
     candidates: {},
   }
 }
 
-function normalizeTodoDraft(draft: AiDraft, context: AiCommandContext): AiParseResult {
-  const content = normalizeString(draft.fields.content)
+function sanitizeTodoDraft(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+  if (!raw.draft || raw.draft.actionType !== 'create_todo') {
+    return unsupportedResult()
+  }
+
+  const content = normalizeString(raw.draft.fields.content)
   if (!content) {
-    return UNSUPPORTED_RESULT
+    return unsupportedResult()
   }
 
   const fields: AiDraftFields = { content }
-  const nodeId = draft.fields.nodeId
+  const nodeId = raw.draft.fields.nodeId
   if (hasNode(context, nodeId)) {
     fields.nodeId = nodeId
     return {
       status: 'ready',
       draft: { actionType: 'create_todo', fields },
-      summary: '',
+      summary: raw.summary,
       missingFields: [],
       candidates: {},
     }
@@ -170,95 +196,107 @@ function normalizeTodoDraft(draft: AiDraft, context: AiCommandContext): AiParseR
   return {
     status: 'needs_input',
     draft: { actionType: 'create_todo', fields },
-    summary: '',
+    summary: raw.summary,
     missingFields: ['nodeId'],
     candidates: { nodes: getNodeCandidates(context) },
   }
 }
 
-function normalizeExpenseDraft(draft: AiDraft, context: AiCommandContext): AiParseResult {
-  const fields: AiDraftFields = {}
-  const type = draft.fields.type === 'income' ? 'income' : 'expense'
-  fields.type = type
-
-  const amount = normalizeAmount(draft.fields.amount)
-  if (amount === undefined) {
-    return UNSUPPORTED_RESULT
+function sanitizeExpenseDraft(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+  if (!raw.draft || raw.draft.actionType !== 'create_expense') {
+    return unsupportedResult()
   }
-  fields.amount = amount
 
-  const category = normalizeExpenseCategory(draft.fields, type)
-  fields.category = category
+  const amount = normalizeAmount(raw.draft.fields.amount)
+  if (amount === undefined) {
+    return unsupportedResult()
+  }
 
-  const description = normalizeString(draft.fields.description)
+  const type: ExpenseType = raw.draft.fields.type === 'income' ? 'income' : 'expense'
+  const fields: AiDraftFields = {
+    type,
+    amount,
+    category: normalizeExpenseCategory(raw.draft.fields, type),
+  }
+
+  const description = normalizeString(raw.draft.fields.description)
   if (description) {
     fields.description = description
   }
 
-  const todoId = draft.fields.todoId
+  const todoId = raw.draft.fields.todoId
   if (hasTodo(context, todoId)) {
-    const todoNode = findTodoNode(context, todoId as number)
-    if (todoNode) {
-      fields.todoId = todoId
-      if (typeof draft.fields.todoName === 'string' && draft.fields.todoName.trim()) {
-        fields.todoName = draft.fields.todoName.trim()
-      }
-      fields.nodeId = todoNode.nodeId
-      fields.nodeName = todoNode.nodeName
+    const groundedTodo = getTodoById(context, todoId)
+    if (!groundedTodo) {
+      return unsupportedResult()
     }
+
+    fields.todoId = todoId
+    fields.todoName = groundedTodo.todoName
+    fields.nodeId = groundedTodo.nodeId
+    fields.nodeName = groundedTodo.nodeName
 
     return {
       status: 'ready',
       draft: { actionType: 'create_expense', fields },
-      summary: '',
+      summary: raw.summary,
       missingFields: [],
       candidates: {},
     }
   }
 
-  const nodeId = draft.fields.nodeId
+  const nodeId = raw.draft.fields.nodeId
   if (hasNode(context, nodeId)) {
+    const groundedNode = getNodeById(context, nodeId)
+    if (!groundedNode) {
+      return unsupportedResult()
+    }
+
+    fields.nodeId = groundedNode.id
+    fields.nodeName = groundedNode.name
+
     return {
       status: 'needs_input',
-      draft: { actionType: 'create_expense', fields: { ...fields, nodeId, nodeName: context.nodes.find(node => node.id === nodeId)?.name } },
-      summary: '',
+      draft: { actionType: 'create_expense', fields },
+      summary: raw.summary,
       missingFields: ['todoId'],
-      candidates: { todos: getTodosForNode(context, nodeId) },
+      candidates: { todos: getTodosForNode(context, groundedNode.id) },
     }
   }
 
   return {
     status: 'needs_input',
     draft: { actionType: 'create_expense', fields },
-    summary: '',
+    summary: raw.summary,
     missingFields: ['todoId'],
     candidates: { nodes: getNodeCandidates(context) },
   }
 }
 
-export function validateAiParseResult(raw: AiParseResult, context: AiCommandContext): AiParseResult {
-  if (!isRecord(raw) || !isValidStatus(raw.status) || !isRecord(raw.draft) || !isValidActionType(raw.draft.actionType)) {
-    return UNSUPPORTED_RESULT
-  }
-
-  if (raw.status !== 'ready') {
-    return raw
+function sanitizeActionableDraft(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+  if (!raw.draft || !isValidActionType(raw.draft.actionType)) {
+    return unsupportedResult()
   }
 
   if (raw.draft.actionType === 'create_node') {
-    const normalized = normalizeNodeDraft(raw.draft)
-    return { ...normalized, summary: raw.summary, missingFields: raw.missingFields, candidates: raw.candidates }
+    return sanitizeNodeDraft(raw)
   }
 
   if (raw.draft.actionType === 'create_todo') {
-    const normalized = normalizeTodoDraft(raw.draft, context)
-    return { ...normalized, summary: raw.summary }
+    return sanitizeTodoDraft(raw, context)
   }
 
-  if (raw.draft.actionType === 'create_expense') {
-    const normalized = normalizeExpenseDraft(raw.draft, context)
-    return { ...normalized, summary: raw.summary }
+  return sanitizeExpenseDraft(raw, context)
+}
+
+export function validateAiParseResult(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+  if (!isRecord(raw) || !isValidStatus(raw.status)) {
+    return unsupportedResult()
   }
 
-  return UNSUPPORTED_RESULT
+  if (raw.status === 'unsupported') {
+    return unsupportedResult()
+  }
+
+  return sanitizeActionableDraft(raw, context)
 }

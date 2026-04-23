@@ -68,6 +68,27 @@ describe('validateAiParseResult', () => {
     ])
   })
 
+  it('sanitizes a needs_input create todo draft with invented nodeId', () => {
+    const result = validateAiParseResult({
+      status: 'needs_input',
+      draft: {
+        actionType: 'create_todo',
+        fields: { nodeId: 999, content: '确认菜单' },
+      },
+      summary: '请选择节点',
+      missingFields: [],
+      candidates: {},
+    }, context)
+
+    expect(result.status).toBe('needs_input')
+    expect(result.missingFields).toEqual(['nodeId'])
+    expect(result.draft?.fields).toEqual({ content: '确认菜单' })
+    expect(result.candidates.nodes).toEqual([
+      { id: 13, name: '婚宴' },
+      { id: 18, name: '婚纱照' },
+    ])
+  })
+
   it('rejects invented nodeId values by requiring user selection', () => {
     const result = validateAiParseResult({
       status: 'ready',
@@ -133,6 +154,40 @@ describe('validateAiParseResult', () => {
 
     expect(result.status).toBe('ready')
     expect(result.draft?.fields.category).toBe('其他支出')
+  })
+
+  it('derives grounded todo names from context for valid todo expenses', () => {
+    const result = validateAiParseResult({
+      status: 'ready',
+      draft: {
+        actionType: 'create_expense',
+        fields: {
+          todoId: 88,
+          todoName: '幻想的待办名',
+          nodeId: 999,
+          nodeName: '幻想的节点名',
+          type: 'expense',
+          amount: 3000,
+          category: '摄影费用',
+          description: '摄影费用',
+        },
+      },
+      summary: '将在婚纱照 / 选片下记录支出：¥3000',
+      missingFields: [],
+      candidates: {},
+    }, context)
+
+    expect(result.status).toBe('ready')
+    expect(result.draft?.fields).toEqual({
+      todoId: 88,
+      todoName: '选片',
+      nodeId: 18,
+      nodeName: '婚纱照',
+      type: 'expense',
+      amount: 3000,
+      category: '其他支出',
+      description: '摄影费用',
+    })
   })
 
   it('returns unsupported for unsupported action types', () => {
