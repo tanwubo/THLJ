@@ -107,6 +107,90 @@ describe('confirmAiDraft', () => {
     })
   })
 
+  it('rejects a ready expense draft with zero amount', async () => {
+    const timelineAPI = { createNode: vi.fn() }
+    const todoAPI = { createTodo: vi.fn() }
+    const expenseAPI = { createExpense: vi.fn() }
+
+    await expect(
+      confirmAiDraft({
+        result: {
+          status: 'ready',
+          draft: {
+            actionType: 'create_expense',
+            fields: {
+              todoId: 88,
+              type: 'expense',
+              amount: 0,
+              category: '婚纱摄影',
+              description: '摄影费用',
+            },
+          },
+          summary: '将在婚纱照 / 选片下记录支出：¥0，分类：婚纱摄影',
+          missingFields: [],
+          candidates: {},
+        },
+        timelineAPI,
+        todoAPI,
+        expenseAPI,
+        emitRealtimeEvent: vi.fn(),
+      })
+    ).rejects.toThrow('费用信息不完整')
+    expect(expenseAPI.createExpense).not.toHaveBeenCalled()
+  })
+
+  it('rejects a ready node draft with blank name', async () => {
+    const timelineAPI = { createNode: vi.fn() }
+    const todoAPI = { createTodo: vi.fn() }
+    const expenseAPI = { createExpense: vi.fn() }
+
+    await expect(
+      confirmAiDraft({
+        result: {
+          status: 'ready',
+          draft: {
+            actionType: 'create_node',
+            fields: { name: '   ', deadline: '2026-10-01' },
+          },
+          summary: '将新增节点：   ，截止 2026-10-01',
+          missingFields: [],
+          candidates: {},
+        },
+        timelineAPI,
+        todoAPI,
+        expenseAPI,
+        emitRealtimeEvent: vi.fn(),
+      })
+    ).rejects.toThrow('节点名称不能为空')
+    expect(timelineAPI.createNode).not.toHaveBeenCalled()
+  })
+
+  it('rejects a ready todo draft with blank content', async () => {
+    const timelineAPI = { createNode: vi.fn() }
+    const todoAPI = { createTodo: vi.fn() }
+    const expenseAPI = { createExpense: vi.fn() }
+
+    await expect(
+      confirmAiDraft({
+        result: {
+          status: 'ready',
+          draft: {
+            actionType: 'create_todo',
+            fields: { nodeId: 13, content: '   ', deadline: '2026-09-20' },
+          },
+          summary: '将在婚宴节点新增待办：   ，截止 2026-09-20',
+          missingFields: [],
+          candidates: {},
+        },
+        timelineAPI,
+        todoAPI,
+        expenseAPI,
+        emitRealtimeEvent: vi.fn(),
+      })
+    ).rejects.toThrow('待办信息不完整')
+    expect(todoAPI.createTodo).not.toHaveBeenCalled()
+  })
+
   it('rejects drafts that are not ready', async () => {
     const result: AiParseCommandResponse = {
       status: 'needs_input',

@@ -68,7 +68,7 @@ export async function confirmAiDraft({
     const todoId = draft.fields.todoId
     const type = draft.fields.type
     const amount = draft.fields.amount
-    if (!todoId || !type || typeof amount !== 'number') {
+    if (!todoId || !type || typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
       throw new Error('费用信息不完整')
     }
 
