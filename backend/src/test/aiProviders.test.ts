@@ -18,6 +18,7 @@ describe('AI context and providers', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.clearAllMocks()
+    vi.unstubAllGlobals()
     delete process.env.AI_PROVIDER
     delete process.env.AI_MODEL
     delete process.env.AI_API_KEY
@@ -63,12 +64,38 @@ describe('AI context and providers', () => {
     expect(createAiProvider().name).toBe('openai')
   })
 
-  it('creates a MiniMax provider from environment variables', () => {
+  it('creates a MiniMax provider from environment variables', async () => {
     process.env.AI_PROVIDER = 'minimax'
-    process.env.AI_MODEL = 'MiniMax-M1'
     process.env.AI_API_KEY = 'test-key'
     process.env.AI_BASE_URL = 'https://api.minimax.io/v1'
-    expect(createAiProvider().name).toBe('minimax')
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                status: 'unsupported',
+                draft: null,
+                summary: '暂不支持这个操作。',
+                missingFields: [],
+                candidates: {},
+              }),
+            },
+          },
+        ],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = createAiProvider()
+    expect(provider.name).toBe('minimax')
+    await provider.parse({ message: '帮我看看', context })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
+    expect(body.model).toBe('MiniMax-M2.7')
+    expect(body.response_format).toBeUndefined()
+    expect(body.messages[0].content).toContain('只返回一个严格 JSON 对象')
   })
 
   it('maps OpenAI structured output text to an AI parse result', async () => {
@@ -111,6 +138,42 @@ describe('AI context and providers', () => {
     expect(result.draft?.fields.name).toBe('拍婚纱照')
   })
 
+  it('maps OpenAI output text when it appears after non-text output items', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output: [
+          { type: 'reasoning', content: [] },
+          {
+            content: [
+              {
+                type: 'output_text',
+                text: JSON.stringify({
+                  status: 'ready',
+                  draft: { actionType: 'create_node', fields: { name: '拍婚纱照' } },
+                  summary: '将新增节点：拍婚纱照',
+                  missingFields: [],
+                  candidates: {},
+                }),
+              },
+            ],
+          },
+        ],
+      }),
+    })
+    const provider = createOpenAiProvider({
+      apiKey: 'test-key',
+      model: 'gpt-4.1-mini',
+      baseUrl: 'https://api.openai.com/v1',
+      timeoutMs: 15000,
+      fetchImpl: fetchMock,
+    })
+
+    const result = await provider.parseCommand({ message: '增加拍婚纱照节点', page: 'timeline' }, context)
+
+    expect(result.draft?.fields.name).toBe('拍婚纱照')
+  })
+
   it('maps MiniMax chat completion content to an AI parse result', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -132,7 +195,7 @@ describe('AI context and providers', () => {
     })
     const provider = createMiniMaxProvider({
       apiKey: 'test-key',
-      model: 'MiniMax-M1',
+      model: 'MiniMax-M2.7',
       baseUrl: 'https://api.minimax.io/v1',
       timeoutMs: 15000,
       fetchImpl: fetchMock,
@@ -140,5 +203,55 @@ describe('AI context and providers', () => {
     const result = await provider.parseCommand({ message: '增加一个10月1日拍婚纱照的节点', page: 'timeline' }, context)
     expect(fetchMock).toHaveBeenCalledWith('https://api.minimax.io/v1/chat/completions', expect.objectContaining({ method: 'POST' }))
     expect(result.summary).toContain('拍婚纱照')
+  })
+
+  it('maps MiniMax content with thinking text before the final JSON object', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: `<think>需要识别用户要新增节点。</think>\n\n${JSON.stringify({
+                status: 'ready',
+                draft: { actionType: 'create_node', fields: { name: '拍婚纱照', deadline: '2026-10-01' } },
+                summary: '将新增节点：拍婚纱照，截止 2026-10-01',
+                missingFields: [],
+                candidates: {},
+              })}`,
+            },
+          },
+        ],
+      }),
+    })
+    const provider = createMiniMaxProvider({
+      apiKey: 'test-key',
+      model: 'MiniMax-M2.7',
+      baseUrl: 'https://api.minimax.io/v1',
+      timeoutMs: 15000,
+      fetchImpl: fetchMock,
+    })
+
+    const result = await provider.parseCommand({ message: '增加一个10月1日拍婚纱照的节点', page: 'timeline' }, context)
+
+    expect(result.draft?.fields.name).toBe('拍婚纱照')
+  })
+
+  it('throws malformed when MiniMax content does not contain a JSON object', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '<think>无法解析</think>\n\n没有 JSON' } }],
+      }),
+    })
+    const provider = createMiniMaxProvider({
+      apiKey: 'test-key',
+      model: 'MiniMax-M2.7',
+      baseUrl: 'https://api.minimax.io/v1',
+      timeoutMs: 15000,
+      fetchImpl: fetchMock,
+    })
+
+    await expect(provider.parseCommand({ message: '随便说点什么', page: 'timeline' }, context)).rejects.toMatchObject({ code: 'malformed' })
   })
 })

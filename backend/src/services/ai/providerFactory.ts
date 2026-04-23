@@ -33,7 +33,7 @@ export function createAiProvider(): AiProvider & { name: 'openai' | 'minimax' } 
   if (providerName === 'minimax') {
     return createMiniMaxProvider({
       apiKey,
-      model: process.env.AI_MODEL ?? 'MiniMax-M1',
+      model: process.env.AI_MODEL ?? 'MiniMax-M2.7',
       baseUrl: normalizeBaseUrl(process.env.AI_BASE_URL ?? 'https://api.minimax.io/v1'),
       timeoutMs,
     })

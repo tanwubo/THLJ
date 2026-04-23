@@ -43,8 +43,22 @@ function extractText(payload: any): string | null {
     return payload.output_text
   }
 
-  const outputText = payload?.output?.[0]?.content?.find((item: any) => typeof item?.text === 'string' && item.text.trim())?.text
-  return typeof outputText === 'string' ? outputText : null
+  if (!Array.isArray(payload?.output)) {
+    return null
+  }
+
+  for (const outputItem of payload.output) {
+    if (!Array.isArray(outputItem?.content)) {
+      continue
+    }
+
+    const contentText = outputItem.content.find((item: any) => typeof item?.text === 'string' && item.text.trim())?.text
+    if (typeof contentText === 'string') {
+      return contentText
+    }
+  }
+
+  return null
 }
 
 async function readJsonResponse(response: Response): Promise<any> {
