@@ -90,6 +90,20 @@ function getTodosForNode(context: AiCommandContext, nodeId: number): AiCandidate
   }))
 }
 
+function getTodoCandidates(context: AiCommandContext): AiCandidateTodo[] {
+  return context.nodes.flatMap(node => node.todos.map(todo => ({
+    id: todo.id,
+    content: todo.content,
+    nodeId: node.id,
+    nodeName: node.name,
+  })))
+}
+
+function normalizeSummary(value: unknown, fallback: string): string {
+  const summary = normalizeString(value)
+  return summary ?? fallback
+}
+
 function hasNode(context: AiCommandContext, nodeId: unknown): nodeId is number {
   return typeof nodeId === 'number' && Number.isInteger(nodeId) && context.nodes.some(node => node.id === nodeId)
 }
@@ -164,7 +178,7 @@ function sanitizeNodeDraft(raw: AiParseResult): AiParseResult {
   return {
     status: 'ready',
     draft: { actionType: 'create_node', fields },
-    summary: raw.summary,
+    summary: normalizeSummary(raw.summary, `将新增节点：${name}`),
     missingFields: [],
     candidates: {},
   }
@@ -187,7 +201,7 @@ function sanitizeTodoDraft(raw: AiParseResult, context: AiCommandContext): AiPar
     return {
       status: 'ready',
       draft: { actionType: 'create_todo', fields },
-      summary: raw.summary,
+      summary: normalizeSummary(raw.summary, `将在${getNodeById(context, nodeId)?.name ?? '所选节点'}节点新增待办：${content}`),
       missingFields: [],
       candidates: {},
     }
@@ -196,7 +210,7 @@ function sanitizeTodoDraft(raw: AiParseResult, context: AiCommandContext): AiPar
   return {
     status: 'needs_input',
     draft: { actionType: 'create_todo', fields },
-    summary: raw.summary,
+    summary: normalizeSummary(raw.summary, `识别到待办：${content}。请选择要添加到哪个节点。`),
     missingFields: ['nodeId'],
     candidates: { nodes: getNodeCandidates(context) },
   }
@@ -239,7 +253,7 @@ function sanitizeExpenseDraft(raw: AiParseResult, context: AiCommandContext): Ai
     return {
       status: 'ready',
       draft: { actionType: 'create_expense', fields },
-      summary: raw.summary,
+      summary: normalizeSummary(raw.summary, `将在${groundedTodo.nodeName} / ${groundedTodo.todoName}下记录${type === 'income' ? '收入' : '支出'}：¥${amount}`),
       missingFields: [],
       candidates: {},
     }
@@ -258,7 +272,7 @@ function sanitizeExpenseDraft(raw: AiParseResult, context: AiCommandContext): Ai
     return {
       status: 'needs_input',
       draft: { actionType: 'create_expense', fields },
-      summary: raw.summary,
+      summary: normalizeSummary(raw.summary, `识别到一笔${type === 'income' ? '收入' : '支出'} ¥${amount}。请选择要挂到哪个待办。`),
       missingFields: ['todoId'],
       candidates: { todos: getTodosForNode(context, groundedNode.id) },
     }
@@ -267,9 +281,9 @@ function sanitizeExpenseDraft(raw: AiParseResult, context: AiCommandContext): Ai
   return {
     status: 'needs_input',
     draft: { actionType: 'create_expense', fields },
-    summary: raw.summary,
+    summary: normalizeSummary(raw.summary, `识别到一笔${type === 'income' ? '收入' : '支出'} ¥${amount}。请选择要挂到哪个待办。`),
     missingFields: ['todoId'],
-    candidates: { nodes: getNodeCandidates(context) },
+    candidates: { todos: getTodoCandidates(context) },
   }
 }
 

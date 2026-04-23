@@ -200,6 +200,48 @@ describe('validateAiParseResult', () => {
     expect(result.draft?.fields.category).toBe('其他支出')
   })
 
+  it('returns all todo candidates when an expense target is missing entirely', () => {
+    const result = validateAiParseResult({
+      status: 'ready',
+      draft: {
+        actionType: 'create_expense',
+        fields: {
+          type: 'expense',
+          amount: 5000,
+          category: '婚宴',
+          description: '定金',
+        },
+      },
+      summary: '识别到一笔支出 ¥5000。请选择要挂到哪个待办。',
+      missingFields: [],
+      candidates: {},
+    }, context)
+
+    expect(result.status).toBe('needs_input')
+    expect(result.missingFields).toEqual(['todoId'])
+    expect(result.candidates.todos).toEqual([
+      { id: 91, content: '确认菜单', nodeId: 13, nodeName: '婚宴' },
+      { id: 92, content: '支付酒店定金', nodeId: 13, nodeName: '婚宴' },
+      { id: 88, content: '选片', nodeId: 18, nodeName: '婚纱照' },
+    ])
+  })
+
+  it('normalizes non-string summaries before returning actionable drafts', () => {
+    const result = validateAiParseResult({
+      status: 'ready',
+      draft: {
+        actionType: 'create_todo',
+        fields: { content: '确认菜单' },
+      },
+      summary: { text: '请选择节点' },
+      missingFields: [],
+      candidates: {},
+    } as unknown as AiParseResult, context)
+
+    expect(result.status).toBe('needs_input')
+    expect(result.summary).toBe('识别到待办：确认菜单。请选择要添加到哪个节点。')
+  })
+
   it('derives grounded todo names from context for valid todo expenses', () => {
     const result = validateAiParseResult({
       status: 'ready',
