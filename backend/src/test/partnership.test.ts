@@ -96,7 +96,7 @@ describe('partnership data access', () => {
         expect(params).toEqual([1])
         return [{ id: 1, username: 'alice', partner_id: 2, data_owner_id: 2 }]
       }
-      if (sql === 'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC') {
+      if (sql === 'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, "order" ASC') {
         expect(params).toEqual([2])
         return [{ id: 10, user_id: 2, name: '婚前筹备', order: 1, status: 'pending' }]
       }
@@ -113,7 +113,7 @@ describe('partnership data access', () => {
     await getTimeline(req, res)
 
     expect(queryMock).toHaveBeenCalledWith(
-      'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC',
+      'SELECT * FROM timeline_nodes WHERE user_id = ? ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, "order" ASC',
       [2],
     )
     expect(json).toHaveBeenCalledWith({
