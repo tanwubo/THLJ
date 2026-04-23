@@ -211,7 +211,7 @@ MiniMax example:
 
 ```env
 AI_PROVIDER=minimax
-AI_MODEL=MiniMax-M1
+AI_MODEL=MiniMax-M2.7
 AI_API_KEY=...
 AI_BASE_URL=https://api.minimax.io/v1
 AI_TIMEOUT_MS=15000

@@ -687,7 +687,7 @@ describe('AI context and providers', () => {
 
   it('creates a MiniMax provider from environment variables', () => {
     process.env.AI_PROVIDER = 'minimax'
-    process.env.AI_MODEL = 'MiniMax-M1'
+    process.env.AI_MODEL = 'MiniMax-M2.7'
     process.env.AI_API_KEY = 'test-key'
     process.env.AI_BASE_URL = 'https://api.minimax.io/v1'
 
@@ -759,7 +759,7 @@ describe('AI context and providers', () => {
 
     const provider = createMiniMaxProvider({
       apiKey: 'test-key',
-      model: 'MiniMax-M1',
+      model: 'MiniMax-M2.7',
       baseUrl: 'https://api.minimax.io/v1',
       timeoutMs: 15000,
       fetchImpl: fetchMock,
@@ -997,7 +997,6 @@ export function createMiniMaxProvider(options: ProviderOptions): AiProvider & { 
             { role: 'system', content: buildSystemPrompt(context) },
             { role: 'user', content: input.message },
           ],
-          response_format: { type: 'json_object' },
         }),
       }, options.timeoutMs)
 
@@ -1056,7 +1055,7 @@ export function createAiProvider(): NamedAiProvider {
   if (provider === 'minimax') {
     return createMiniMaxProvider({
       apiKey,
-      model: process.env.AI_MODEL || 'MiniMax-M1',
+      model: process.env.AI_MODEL || 'MiniMax-M2.7',
       baseUrl: (process.env.AI_BASE_URL || 'https://api.minimax.io/v1').replace(/\/$/, ''),
       timeoutMs,
     })
