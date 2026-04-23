@@ -84,8 +84,8 @@ export interface AiParseCommandResponse {
   summary: string
   missingFields: string[]
   candidates: {
-    nodes: Array<{ id: number; name: string }>
-    todos: Array<{ id: number; name: string }>
+    nodes?: Array<{ id: number; name: string }>
+    todos?: Array<{ id: number; content: string; nodeId: number; nodeName: string }>
   }
 }
 

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AiParseCommandResponse } from '../services/api'
 
 const postMock = vi.fn()
 
@@ -15,16 +16,25 @@ vi.mock('axios', () => ({
 }))
 
 describe('aiAPI', () => {
+  beforeEach(() => {
+    postMock.mockReset()
+    vi.resetModules()
+  })
+
   it('posts parse commands to the AI endpoint', async () => {
     const { aiAPI } = await import('../services/api')
-    postMock.mockResolvedValue({
-      data: {
-        status: 'ready',
-        draft: { actionType: 'create_node', fields: { name: '拍婚纱照', deadline: '2026-10-01' } },
-        summary: '将新增节点：拍婚纱照，截止 2026-10-01',
-        missingFields: [],
-        candidates: {},
+    const mockedResponse: AiParseCommandResponse = {
+      status: 'needs_input',
+      draft: null,
+      summary: '需要选择目标节点',
+      missingFields: ['nodeId'],
+      candidates: {
+        nodes: [{ id: 1, name: '婚礼筹备' }],
+        todos: [{ id: 7, content: '确认摄影档期', nodeId: 1, nodeName: '婚礼筹备' }],
       },
+    }
+    postMock.mockResolvedValue({
+      data: mockedResponse,
     })
 
     const response = await aiAPI.parseCommand({
@@ -38,6 +48,7 @@ describe('aiAPI', () => {
       page: 'timeline',
       currentNodeId: null,
     })
-    expect(response.data.draft?.fields.name).toBe('拍婚纱照')
+    expect(response.data.draft?.fields.name).toBeUndefined()
+    expect(response.data.candidates.todos?.[0].nodeName).toBe('婚礼筹备')
   })
 })
