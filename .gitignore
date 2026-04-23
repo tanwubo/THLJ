@@ -8,3 +8,7 @@ backend/public/uploads/*
 .env
 *.log
 
+.idea/
+.claude/
+docs/
+.superpowers/

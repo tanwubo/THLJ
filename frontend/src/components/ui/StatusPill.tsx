@@ -7,8 +7,10 @@ export const statusLabelMap = {
 
 type StatusPillProps = {
   status: keyof typeof statusLabelMap
+  inverse?: boolean
 }
 
-export default function StatusPill({ status }: StatusPillProps) {
-  return <span className={`status-pill whitespace-nowrap status-pill--${status}`}>{statusLabelMap[status]}</span>
+export default function StatusPill({ status, inverse }: StatusPillProps) {
+  const className = `status-pill whitespace-nowrap status-pill--${status}${inverse ? ' status-pill--inverse' : ''}`
+  return <span className={className}>{statusLabelMap[status]}</span>
 }

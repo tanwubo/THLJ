@@ -91,7 +91,6 @@ export default function Statistics() {
             </svg>
             <div className="stats-hero-card__ring-value">
               <strong>{stats.overallProgress}%</strong>
-              <span>整体进度</span>
             </div>
           </div>
           <div className="stats-hero-card__summary">

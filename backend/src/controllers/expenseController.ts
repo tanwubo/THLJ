@@ -128,7 +128,7 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: amountCheck.error });
     }
 
-    const categoryCheck = parseExpenseCategory(category, typeCheck.value);
+    const categoryCheck = parseExpenseCategory(category, typeCheck.value!);
     if (categoryCheck.error) {
       return res.status(400).json({ error: categoryCheck.error });
     }

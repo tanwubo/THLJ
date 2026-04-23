@@ -124,6 +124,9 @@ describe('node detail budget interactions', () => {
       data: buildWorkbench(),
     })
     vi.spyOn(Dialog, 'confirm').mockResolvedValue(true as never)
+    vi.spyOn(Dialog, 'show').mockImplementation((config: any) => {
+      config?.onClose?.()
+    })
     vi.spyOn(Toast, 'show').mockImplementation(() => undefined)
     vi.mocked(timelineAPI.updateNode).mockResolvedValue({ data: {} } as Awaited<ReturnType<typeof timelineAPI.updateNode>>)
     vi.mocked(todoAPI.updateTodoStatus).mockResolvedValue({ data: {} } as Awaited<ReturnType<typeof todoAPI.updateTodoStatus>>)
@@ -240,10 +243,41 @@ describe('node detail budget interactions', () => {
     await waitFor(() => {
       expect(todoAPI.updateTodoStatus).toHaveBeenCalledWith(11, 'completed')
     })
-    expect(Dialog.confirm).toHaveBeenCalled()
+    expect(Dialog.show).toHaveBeenCalled()
+    const dialogConfig = vi.mocked(Dialog.show).mock.calls[0][0]
+    expect(dialogConfig.actions?.[0].text).toBe('确定')
+    expect(dialogConfig.actions?.[1].text).toBe('取消')
+    dialogConfig.actions?.[0].onClick?.()
     await waitFor(() => {
       expect(timelineAPI.updateNode).toHaveBeenCalledWith(1, { status: 'completed' })
     })
+  })
+
+  it('does not complete node when user clicks cancel in the confirmation dialog', async () => {
+    useNodeWorkbenchMock.mockReturnValue({
+      loading: false,
+      refresh: refreshMock,
+      data: buildWorkbench({
+        todos: [
+          buildTodo({
+            status: 'pending',
+            expenses: [],
+          }),
+        ],
+      }),
+    })
+
+    renderNodeDetail()
+
+    fireEvent.click(screen.getByRole('checkbox'))
+
+    await waitFor(() => {
+      expect(todoAPI.updateTodoStatus).toHaveBeenCalledWith(11, 'completed')
+    })
+    expect(Dialog.show).toHaveBeenCalled()
+    const dialogConfig = vi.mocked(Dialog.show).mock.calls[0][0]
+    dialogConfig.actions?.[1].onClick?.()
+    expect(timelineAPI.updateNode).not.toHaveBeenCalled()
   })
 
   it('refreshes the todo state even when the follow-up node completion update fails', async () => {

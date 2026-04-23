@@ -91,18 +91,28 @@ export default function NodeDetail() {
         data?.node.status !== 'completed'
 
       if (shouldPromptCompleteNode) {
-        const shouldCompleteNode = await Dialog.confirm({
-          content: '最后一个未完成待办已完成，是否将节点状态设为已完成？',
-        }).then(() => true).catch(() => false)
-
-        if (shouldCompleteNode) {
-          try {
-            await timelineAPI.updateNode(nodeId, { status: 'completed' })
-            emitRealtimeEvent('node_update', 'status_changed', { id: nodeId, status: 'completed' })
-          } catch (error: any) {
-            Toast.show(error.response?.data?.error || '更新失败')
-          }
-        }
+        await new Promise<void>((resolve) => {
+          Dialog.show({
+            content: '最后一个未完成待办已完成，是否将节点状态设为已完成？',
+            closeOnAction: true,
+            actions: [
+              {
+                key: 'confirm',
+                text: '确定',
+                onClick: async () => {
+                  try {
+                    await timelineAPI.updateNode(nodeId, { status: 'completed' })
+                    emitRealtimeEvent('node_update', 'status_changed', { id: nodeId, status: 'completed' })
+                  } catch (error: any) {
+                    Toast.show(error.response?.data?.error || '更新失败')
+                  }
+                },
+              },
+              { key: 'cancel', text: '取消' },
+            ],
+            onClose: () => resolve(),
+          })
+        })
       }
       await refresh()
     } catch (error: any) {
@@ -265,7 +275,7 @@ export default function NodeDetail() {
           eyebrow="Node Workbook"
           title={data.node.name}
           subtitle={data.node.description || '围绕这个阶段集中推进待办、预算与关键备注。'}
-          aside={<StatusPill status={data.node.status} />}
+          aside={<StatusPill status={data.node.status} inverse />}
         />
       }
     >
