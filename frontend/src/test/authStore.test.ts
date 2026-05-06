@@ -123,6 +123,21 @@ describe('useAuthStore', () => {
 
       expect(mockSocket.disconnect).toHaveBeenCalled()
     })
+
+    it('should clear persisted auth state when an unauthorized response is reported globally', () => {
+      useAuthStore.setState({
+        token: 'stale-token',
+        user: { id: 1, username: 'test' } as any,
+      })
+
+      window.dispatchEvent(new Event('auth:logout'))
+
+      const state = useAuthStore.getState()
+      expect(state.token).toBeNull()
+      expect(state.user).toBeNull()
+      expect(localStorage.removeItem).toHaveBeenCalledWith('token')
+      expect(localStorage.removeItem).toHaveBeenCalledWith('auth-storage')
+    })
   })
 
   describe('connectSocket action', () => {

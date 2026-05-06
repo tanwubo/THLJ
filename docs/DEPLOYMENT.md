@@ -238,9 +238,54 @@ tar -xzf backups/你的备份文件.tar.gz
 docker compose up -d
 ```
 
-## 6. 常见问题
+## 6. 清空线上数据
 
-### 6.1 提示 JWT_SECRET is required
+如果要把线上数据恢复成空库，先确认已经不需要保留当前业务数据。清空会删除：
+
+- 数据库：`backend/data/wedding.db`
+- 上传附件：`backend/public/uploads/`
+
+推荐按下面步骤执行，先停服务再清理，避免后端运行时把内存里的旧数据库重新写回磁盘：
+
+```bash
+cd /opt/wedding-manager
+docker compose down
+```
+
+先做一次清空前备份：
+
+```bash
+mkdir -p backups
+cp backend/data/wedding.db "backups/wedding-before-clean-$(date +%F-%H%M%S).db"
+tar -czf "backups/uploads-before-clean-$(date +%F-%H%M%S).tar.gz" backend/public/uploads
+```
+
+删除数据库和上传附件：
+
+```bash
+rm -f backend/data/wedding.db
+rm -rf backend/public/uploads/*
+mkdir -p backend/data backend/public/uploads
+```
+
+重新启动服务：
+
+```bash
+docker compose up -d
+```
+
+确认服务状态：
+
+```bash
+docker compose ps
+docker compose logs --tail=100 backend
+```
+
+后端启动时会自动重新创建数据库表结构。不要在容器运行中直接删除 `backend/data/wedding.db`，否则旧数据可能被运行中的后端再次保存回来。
+
+## 7. 常见问题
+
+### 7.1 提示 JWT_SECRET is required
 
 说明还没有创建 `.env`，或 `.env` 里没有 `JWT_SECRET`。
 
@@ -257,7 +302,7 @@ nano .env
 docker compose up -d
 ```
 
-### 6.2 页面能打开，但登录或接口请求失败
+### 7.2 页面能打开，但登录或接口请求失败
 
 先看后端日志：
 
@@ -277,7 +322,7 @@ CORS_ORIGINS=http://1.2.3.4
 docker compose up -d
 ```
 
-### 6.3 80 端口被占用
+### 7.3 80 端口被占用
 
 查看占用：
 
@@ -304,7 +349,7 @@ http://你的服务器IP:8080
 CORS_ORIGINS=http://你的服务器IP:8080
 ```
 
-### 6.4 上传的附件更新后不见了
+### 7.4 上传的附件更新后不见了
 
 检查宿主机目录是否存在：
 
@@ -314,7 +359,7 @@ ls -lah backend/public/uploads
 
 本项目已经把附件目录挂载到宿主机。不要手动删除 `backend/public/uploads/`。
 
-### 6.5 数据库更新后不见了
+### 7.5 数据库更新后不见了
 
 检查数据库文件：
 
@@ -324,7 +369,7 @@ ls -lah backend/data
 
 不要删除 `backend/data/wedding.db`。更新部署使用 `docker compose up -d --build`，不要为了更新而删除 `backend/data/`。
 
-## 7. 当前 Docker 配置说明
+## 8. 当前 Docker 配置说明
 
 - `frontend` 容器对外暴露 `80` 端口，负责静态页面和 `/api`、`/socket.io` 反向代理。
 - `backend` 容器只在 Docker 内部网络暴露 `3001`，不会直接暴露到公网。

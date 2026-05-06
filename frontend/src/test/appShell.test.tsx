@@ -24,4 +24,16 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: /时间线/ })).toBeInTheDocument()
     expect(screen.queryByText('📋')).not.toBeInTheDocument()
   })
+
+  it('does not render the paused AI assistant entry by default', () => {
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: /AI 对话入口/ })).not.toBeInTheDocument()
+  })
 })

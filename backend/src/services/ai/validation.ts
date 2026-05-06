@@ -17,6 +17,11 @@ const VALID_EXPENSE_CATEGORIES: Record<ExpenseType, readonly string[]> = {
   expense: ['婚宴', '婚庆', '婚车', '婚纱摄影', '三金/五金', '酒店预订', '婚车车队', '蜜月旅行', '其他支出'],
 }
 
+export interface AiValidationDiagnostics {
+  result: AiParseResult
+  reason?: string
+}
+
 function unsupportedResult(): AiParseResult {
   return {
     status: 'unsupported',
@@ -25,6 +30,17 @@ function unsupportedResult(): AiParseResult {
     missingFields: [],
     candidates: {},
   }
+}
+
+function unsupportedDiagnostics(reason: string): AiValidationDiagnostics {
+  return {
+    result: unsupportedResult(),
+    reason,
+  }
+}
+
+function supportedDiagnostics(result: AiParseResult): AiValidationDiagnostics {
+  return { result }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -144,20 +160,20 @@ function normalizeExpenseCategory(fields: AiDraftFields, type: ExpenseType): str
   return isValidExpenseCategory(category, type) ? category : type === 'income' ? '其他收入' : '其他支出'
 }
 
-function sanitizeNodeDraft(raw: AiParseResult): AiParseResult {
+function sanitizeNodeDraft(raw: AiParseResult): AiValidationDiagnostics {
   if (!raw.draft || raw.draft.actionType !== 'create_node') {
-    return unsupportedResult()
+    return unsupportedDiagnostics('create_node_missing_draft')
   }
 
   const name = normalizeString(raw.draft.fields.name)
   if (!name) {
-    return unsupportedResult()
+    return unsupportedDiagnostics('create_node_missing_name')
   }
 
   const budgetValue = raw.draft.fields.budget
   const budget = budgetValue === undefined ? undefined : normalizeBudget(budgetValue)
   if (budgetValue !== undefined && budget === undefined) {
-    return unsupportedResult()
+    return unsupportedDiagnostics('create_node_invalid_budget')
   }
 
   const fields: AiDraftFields = { name }
@@ -175,55 +191,55 @@ function sanitizeNodeDraft(raw: AiParseResult): AiParseResult {
     fields.budget = budget
   }
 
-  return {
+  return supportedDiagnostics({
     status: 'ready',
     draft: { actionType: 'create_node', fields },
     summary: normalizeSummary(raw.summary, `将新增节点：${name}`),
     missingFields: [],
     candidates: {},
-  }
+  })
 }
 
-function sanitizeTodoDraft(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+function sanitizeTodoDraft(raw: AiParseResult, context: AiCommandContext): AiValidationDiagnostics {
   if (!raw.draft || raw.draft.actionType !== 'create_todo') {
-    return unsupportedResult()
+    return unsupportedDiagnostics('create_todo_missing_draft')
   }
 
   const content = normalizeString(raw.draft.fields.content)
   if (!content) {
-    return unsupportedResult()
+    return unsupportedDiagnostics('create_todo_missing_content')
   }
 
   const fields: AiDraftFields = { content }
   const nodeId = raw.draft.fields.nodeId
   if (hasNode(context, nodeId)) {
     fields.nodeId = nodeId
-    return {
+    return supportedDiagnostics({
       status: 'ready',
       draft: { actionType: 'create_todo', fields },
       summary: normalizeSummary(raw.summary, `将在${getNodeById(context, nodeId)?.name ?? '所选节点'}节点新增待办：${content}`),
       missingFields: [],
       candidates: {},
-    }
+    })
   }
 
-  return {
+  return supportedDiagnostics({
     status: 'needs_input',
     draft: { actionType: 'create_todo', fields },
     summary: normalizeSummary(raw.summary, `识别到待办：${content}。请选择要添加到哪个节点。`),
     missingFields: ['nodeId'],
     candidates: { nodes: getNodeCandidates(context) },
-  }
+  })
 }
 
-function sanitizeExpenseDraft(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+function sanitizeExpenseDraft(raw: AiParseResult, context: AiCommandContext): AiValidationDiagnostics {
   if (!raw.draft || raw.draft.actionType !== 'create_expense') {
-    return unsupportedResult()
+    return unsupportedDiagnostics('create_expense_missing_draft')
   }
 
   const amount = normalizeAmount(raw.draft.fields.amount)
   if (amount === undefined) {
-    return unsupportedResult()
+    return unsupportedDiagnostics('create_expense_invalid_amount')
   }
 
   const type: ExpenseType = raw.draft.fields.type === 'income' ? 'income' : 'expense'
@@ -242,7 +258,7 @@ function sanitizeExpenseDraft(raw: AiParseResult, context: AiCommandContext): Ai
   if (hasTodo(context, todoId)) {
     const groundedTodo = getTodoById(context, todoId)
     if (!groundedTodo) {
-      return unsupportedResult()
+      return unsupportedDiagnostics('create_expense_invalid_todo')
     }
 
     fields.todoId = todoId
@@ -250,50 +266,50 @@ function sanitizeExpenseDraft(raw: AiParseResult, context: AiCommandContext): Ai
     fields.nodeId = groundedTodo.nodeId
     fields.nodeName = groundedTodo.nodeName
 
-    return {
+    return supportedDiagnostics({
       status: 'ready',
       draft: { actionType: 'create_expense', fields },
       summary: normalizeSummary(raw.summary, `将在${groundedTodo.nodeName} / ${groundedTodo.todoName}下记录${type === 'income' ? '收入' : '支出'}：¥${amount}`),
       missingFields: [],
       candidates: {},
-    }
+    })
   }
 
   const nodeId = raw.draft.fields.nodeId
   if (hasNode(context, nodeId)) {
     const groundedNode = getNodeById(context, nodeId)
     if (!groundedNode) {
-      return unsupportedResult()
+      return unsupportedDiagnostics('create_expense_invalid_node')
     }
 
     fields.nodeId = groundedNode.id
     fields.nodeName = groundedNode.name
 
-    return {
+    return supportedDiagnostics({
       status: 'needs_input',
       draft: { actionType: 'create_expense', fields },
       summary: normalizeSummary(raw.summary, `识别到一笔${type === 'income' ? '收入' : '支出'} ¥${amount}。请选择要挂到哪个待办。`),
       missingFields: ['todoId'],
       candidates: { todos: getTodosForNode(context, groundedNode.id) },
-    }
+    })
   }
 
-  return {
+  return supportedDiagnostics({
     status: 'needs_input',
     draft: { actionType: 'create_expense', fields },
     summary: normalizeSummary(raw.summary, `识别到一笔${type === 'income' ? '收入' : '支出'} ¥${amount}。请选择要挂到哪个待办。`),
     missingFields: ['todoId'],
     candidates: { todos: getTodoCandidates(context) },
-  }
+  })
 }
 
-function sanitizeActionableDraft(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+function sanitizeActionableDraft(raw: AiParseResult, context: AiCommandContext): AiValidationDiagnostics {
   if (!raw.draft || !isValidActionType(raw.draft.actionType)) {
-    return unsupportedResult()
+    return unsupportedDiagnostics('invalid_action_type')
   }
 
   if (!isRecord(raw.draft.fields)) {
-    return unsupportedResult()
+    return unsupportedDiagnostics('invalid_fields')
   }
 
   if (raw.draft.actionType === 'create_node') {
@@ -307,14 +323,18 @@ function sanitizeActionableDraft(raw: AiParseResult, context: AiCommandContext):
   return sanitizeExpenseDraft(raw, context)
 }
 
-export function validateAiParseResult(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+export function validateAiParseResultWithDiagnostics(raw: AiParseResult, context: AiCommandContext): AiValidationDiagnostics {
   if (!isRecord(raw) || !isValidStatus(raw.status)) {
-    return unsupportedResult()
+    return unsupportedDiagnostics('invalid_result_status')
   }
 
   if (raw.status === 'unsupported') {
-    return unsupportedResult()
+    return unsupportedDiagnostics('model_returned_unsupported')
   }
 
   return sanitizeActionableDraft(raw, context)
+}
+
+export function validateAiParseResult(raw: AiParseResult, context: AiCommandContext): AiParseResult {
+  return validateAiParseResultWithDiagnostics(raw, context).result
 }

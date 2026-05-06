@@ -25,6 +25,24 @@ interface AuthState {
   loadProfile: () => Promise<void>
 }
 
+function clearStoredAuth() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('auth-storage')
+}
+
+function clearAuthState(showToast: boolean) {
+  const state = useAuthStore.getState()
+  if (state.socket) {
+    state.socket.emit('leave_room')
+    state.socket.disconnect()
+  }
+  useAuthStore.setState({ token: null, user: null, partnerId: null, partner: null, socket: null })
+  clearStoredAuth()
+  if (showToast) {
+    Toast.show('已退出登录')
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -140,14 +158,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        const state = useAuthStore.getState()
-        if (state.socket) {
-          state.socket.emit('leave_room')
-          state.socket.disconnect()
-        }
-        set({ token: null, user: null, partnerId: null, partner: null, socket: null })
-        localStorage.removeItem('token')
-        Toast.show('已退出登录')
+        clearAuthState(true)
       },
 
       loadProfile: async () => {
@@ -174,3 +185,9 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:logout', () => {
+    clearAuthState(false)
+  })
+}

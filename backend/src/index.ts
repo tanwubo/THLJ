@@ -11,7 +11,9 @@ import todoRoutes from './routes/todoRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import memoRoutes from './routes/memoRoutes';
 import attachmentRoutes from './routes/attachmentRoutes';
-import aiRoutes from './routes/aiRoutes';
+// AI assistant is paused for now. Keep the route implementation in place so it
+// can be re-enabled after the model parsing flow is polished.
+// import aiRoutes from './routes/aiRoutes';
 import { getCorsOrigin } from './config/cors';
 
 const app = express();
@@ -47,7 +49,7 @@ app.use('/api/todos', todoRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/memos', memoRoutes);
 app.use('/api/attachments', attachmentRoutes);
-app.use('/api/ai', aiRoutes);
+// app.use('/api/ai', aiRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

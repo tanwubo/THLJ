@@ -1,5 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react'
-import AIAssistantFloatingEntry from '../ai/AIAssistantFloatingEntry'
+// AI assistant is paused for now. Keep the implementation under components/ai
+// so it can be re-enabled after the model flow is polished.
+// import AIAssistantFloatingEntry from '../ai/AIAssistantFloatingEntry'
 import BottomNav from './BottomNav'
 
 type AppShellProps = PropsWithChildren<{
@@ -16,7 +18,7 @@ export default function AppShell({ children, header, withBottomNav = false, cont
       <div className="app-shell__backdrop" aria-hidden="true" />
       {header ? <div className="app-shell__header">{header}</div> : null}
       <main className={contentClasses}>{children}</main>
-      <AIAssistantFloatingEntry />
+      {/* <AIAssistantFloatingEntry /> */}
       {withBottomNav ? <BottomNav /> : null}
     </div>
   )

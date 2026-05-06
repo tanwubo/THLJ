@@ -68,6 +68,83 @@ describe('AI parse endpoint', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  it('logs AI parse checkpoints and unsupported validation reasons without leaking secrets', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const queryMock = query as unknown as ReturnType<typeof vi.fn>
+    queryMock.mockImplementation((sql: string) => {
+      if (sql === 'SELECT id, name FROM timeline_nodes WHERE user_id = ? ORDER BY "order" ASC, id ASC') {
+        return [{ id: 13, name: '婚宴' }]
+      }
+      if (sql === 'SELECT id, node_id, content FROM todo_items WHERE node_id IN (?) ORDER BY node_id ASC, created_at DESC') {
+        return [{ id: 91, node_id: 13, content: '确认菜单' }]
+      }
+      return []
+    })
+
+    const provider = {
+      name: 'openai',
+      parseCommand: vi.fn().mockResolvedValue({
+        status: 'ready',
+        draft: {
+          actionType: 'create_node',
+          fields: { deadline: '2026-10-01' },
+        },
+        summary: '将新增节点',
+        missingFields: [],
+        candidates: {},
+      }),
+    }
+    ;(createAiProvider as unknown as ReturnType<typeof vi.fn>).mockReturnValue(provider)
+
+    const result = await parseCommandForUser({
+      userId: 1,
+      dataOwnerId: 99,
+      body: { message: '增加一个10月1日拍婚纱照的节点 sk-test-secret', page: 'timeline', currentNodeId: null },
+    })
+
+    expect(result.status).toBe('unsupported')
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[ai:parse:start]'),
+      expect.objectContaining({
+        requestId: expect.any(String),
+        userId: 1,
+        dataOwnerId: 99,
+        page: 'timeline',
+        currentNodeId: null,
+        messageLength: expect.any(Number),
+        messagePreview: expect.stringContaining('增加一个10月1日拍婚纱照的节点'),
+      }),
+    )
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[ai:parse:context]'),
+      expect.objectContaining({
+        nodeCount: 1,
+        todoCount: 1,
+        currentNodeExists: false,
+      }),
+    )
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[ai:parse:raw]'),
+      expect.objectContaining({
+        provider: 'openai',
+        status: 'ready',
+        actionType: 'create_node',
+        fieldKeys: ['deadline'],
+      }),
+    )
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[ai:parse:validation]'),
+      expect.objectContaining({
+        status: 'unsupported',
+        reason: 'create_node_missing_name',
+      }),
+    )
+    expect(JSON.stringify(infoSpy.mock.calls)).not.toContain('sk-test-secret')
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('sk-test-secret')
+  })
+
   it('returns 400 for blank message', async () => {
     const json = vi.fn()
     const status = vi.fn().mockReturnValue({ json })
@@ -79,6 +156,7 @@ describe('AI parse endpoint', () => {
   })
 
   it('maps provider configuration errors to friendly 503 responses', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     ;(createAiProvider as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => {
       throw Object.assign(new Error('AI_API_KEY 未配置'), { code: 'config' })
     })
@@ -90,5 +168,13 @@ describe('AI parse endpoint', () => {
 
     expect(status).toHaveBeenCalledWith(503)
     expect(json).toHaveBeenCalledWith({ error: 'AI 服务暂不可用，请稍后再试' })
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[ai:parse:error]'),
+      expect.objectContaining({
+        code: 'config',
+        message: 'AI_API_KEY 未配置',
+        requestId: expect.any(String),
+      }),
+    )
   })
 })

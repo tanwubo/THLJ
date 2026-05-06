@@ -12,6 +12,12 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required. Copy .env.example to .env and set it before deploying.}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - ADMIN_USERNAMES=${ADMIN_USERNAMES:-}
+      # AI assistant is paused for now. Uncomment after the model flow is ready.
+      # - AI_PROVIDER=${AI_PROVIDER:-openai}
+      # - AI_MODEL=${AI_MODEL:-gpt-4.1-mini}
+      # - AI_API_KEY=${AI_API_KEY:-}
+      # - AI_BASE_URL=${AI_BASE_URL:-}
+      # - AI_TIMEOUT_MS=${AI_TIMEOUT_MS:-15000}
     volumes:
       - ./backend/data:/app/data
       - ./backend/public/uploads:/app/public/uploads

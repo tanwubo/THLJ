@@ -11,6 +11,12 @@ $ErrorActionPreference = 'Stop'
 $script:LocalDevConfig = @{
   Backend = @{
     ADMIN_USERNAMES = 'tanwubo_admin'
+    # AI assistant is paused for now. Keep these examples for later re-enable.
+    # AI_PROVIDER = 'minimax'
+    # AI_MODEL = 'MiniMax-M2.7'
+    # AI_API_KEY = ''
+    # AI_BASE_URL = 'https://api.minimaxi.com/v1'
+    # AI_TIMEOUT_MS = '15000'
   }
 }
 
@@ -19,7 +25,18 @@ function Get-ProjectRoot {
 }
 
 function Get-BackendEnvironmentOverrides {
-  return $script:LocalDevConfig.Backend
+  $environment = @{}
+
+  foreach ($entry in $script:LocalDevConfig.Backend.GetEnumerator()) {
+    $processValue = [Environment]::GetEnvironmentVariable($entry.Key)
+    if ([string]::IsNullOrWhiteSpace($processValue)) {
+      $environment[$entry.Key] = $entry.Value
+    } else {
+      $environment[$entry.Key] = $processValue
+    }
+  }
+
+  return $environment
 }
 
 function Get-ServiceLaunchInfo {
